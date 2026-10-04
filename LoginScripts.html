@@ -1,0 +1,424 @@
+<script>
+  (function() {
+    'use strict';
+
+    const SESSION_STORAGE_KEY =
+      'hugoOutreachBackendSession';
+
+    const LOGIN_TIMEOUT_MILLISECONDS = 30000;
+
+    let loginBusy = false;
+    let loginTimeout = null;
+
+    document.addEventListener(
+      'DOMContentLoaded',
+      initializeLogin
+    );
+
+    function initializeLogin() {
+      const form = document.getElementById(
+        'credentialLoginForm'
+      );
+
+      const toggleButton = document.getElementById(
+        'passwordToggleButton'
+      );
+
+      form.addEventListener(
+        'submit',
+        submitLogin
+      );
+
+      toggleButton.addEventListener(
+        'click',
+        togglePassword
+      );
+
+      [
+        'loginUsername',
+        'loginPassword'
+      ].forEach(function(id) {
+        document
+          .getElementById(id)
+          .addEventListener(
+            'input',
+            function() {
+              clearFieldError(id);
+              hideLoginError();
+            }
+          );
+      });
+
+      document
+        .getElementById('loginUsername')
+        .focus();
+    }
+
+    function submitLogin(event) {
+      event.preventDefault();
+
+      if (loginBusy) {
+        return;
+      }
+
+      clearAllErrors();
+
+      const usernameField =
+        document.getElementById(
+          'loginUsername'
+        );
+
+      const passwordField =
+        document.getElementById(
+          'loginPassword'
+        );
+
+      const username = String(
+        usernameField.value || ''
+      )
+        .trim()
+        .toLowerCase();
+
+      const password = String(
+        passwordField.value || ''
+      );
+
+      let valid = true;
+
+      if (!username) {
+        setFieldError(
+          'loginUsername',
+          'Enter your username.'
+        );
+
+        valid = false;
+      }
+
+      if (!password) {
+        setFieldError(
+          'loginPassword',
+          'Enter your password.'
+        );
+
+        valid = false;
+      }
+
+      if (!valid) {
+        focusFirstInvalidField();
+        return;
+      }
+
+      setLoginBusy(true);
+
+      loginTimeout = window.setTimeout(
+        function() {
+          loginTimeout = null;
+          setLoginBusy(false);
+
+          showLoginError(
+            'The login request took too long. Please check your connection and try again.'
+          );
+        },
+        LOGIN_TIMEOUT_MILLISECONDS
+      );
+
+      google.script.run
+        .withSuccessHandler(
+          function(response) {
+            clearLoginTimeout();
+            setLoginBusy(false);
+
+            if (
+              !response ||
+              response.success !== true
+            ) {
+              passwordField.value = '';
+
+              showLoginError(
+                response &&
+                response.message
+                  ? response.message
+                  : 'Invalid username or password.'
+              );
+
+              passwordField.focus();
+              return;
+            }
+
+            if (
+              !response.sessionToken ||
+              !response.dashboardUrl
+            ) {
+              passwordField.value = '';
+
+              showLoginError(
+                'The login was accepted, but a dashboard session could not be created.'
+              );
+
+              passwordField.focus();
+              return;
+            }
+
+            saveSessionToken(
+              response.sessionToken
+            );
+
+            passwordField.value = '';
+
+            document
+              .getElementById(
+                'credentialLoginForm'
+              )
+              .classList
+              .add('is-hidden');
+
+            const continueLink =
+              document.getElementById(
+                'dashboardContinueLink'
+              );
+
+            continueLink.href =
+              response.dashboardUrl;
+
+            document
+              .getElementById(
+                'loginSuccessSection'
+              )
+              .classList
+              .remove('is-hidden');
+
+            continueLink.focus();
+          }
+        )
+        .withFailureHandler(
+          function(error) {
+            clearLoginTimeout();
+            setLoginBusy(false);
+
+            passwordField.value = '';
+
+            showLoginError(
+              loginErrorMessage(error)
+            );
+
+            passwordField.focus();
+          }
+        )
+        .loginAdmin(
+          username,
+          password
+        );
+    }
+
+    function setLoginBusy(busy) {
+      loginBusy = busy;
+
+      const button =
+        document.getElementById(
+          'credentialLoginButton'
+        );
+
+      const label =
+        button.querySelector(
+          '.login-button-label'
+        );
+
+      const loading =
+        button.querySelector(
+          '.login-button-loading'
+        );
+
+      button.disabled = busy;
+
+      label.classList.toggle(
+        'is-hidden',
+        busy
+      );
+
+      loading.classList.toggle(
+        'is-hidden',
+        !busy
+      );
+    }
+
+    function clearLoginTimeout() {
+      if (loginTimeout !== null) {
+        window.clearTimeout(loginTimeout);
+        loginTimeout = null;
+      }
+    }
+
+    function saveSessionToken(token) {
+      try {
+        window.localStorage.setItem(
+          SESSION_STORAGE_KEY,
+          String(token || '')
+        );
+      } catch (error) {
+        /*
+         * The session is also passed to the dashboard
+         * through its URL, so login can continue when
+         * browser storage is unavailable.
+         */
+      }
+    }
+
+    function togglePassword() {
+      const passwordField =
+        document.getElementById(
+          'loginPassword'
+        );
+
+      const toggleButton =
+        document.getElementById(
+          'passwordToggleButton'
+        );
+
+      const currentlyVisible =
+        passwordField.type === 'text';
+
+      passwordField.type =
+        currentlyVisible
+          ? 'password'
+          : 'text';
+
+      toggleButton.textContent =
+        currentlyVisible
+          ? 'Show'
+          : 'Hide';
+
+      toggleButton.setAttribute(
+        'aria-label',
+        currentlyVisible
+          ? 'Show password'
+          : 'Hide password'
+      );
+    }
+
+    function setFieldError(id, message) {
+      const field =
+        document.getElementById(id);
+
+      const error =
+        document.querySelector(
+          '[data-error-for="' +
+          id +
+          '"]'
+        );
+
+      field.classList.add(
+        'is-invalid'
+      );
+
+      field.setAttribute(
+        'aria-invalid',
+        'true'
+      );
+
+      if (error) {
+        error.textContent = message;
+      }
+    }
+
+    function clearFieldError(id) {
+      const field =
+        document.getElementById(id);
+
+      const error =
+        document.querySelector(
+          '[data-error-for="' +
+          id +
+          '"]'
+        );
+
+      field.classList.remove(
+        'is-invalid'
+      );
+
+      field.removeAttribute(
+        'aria-invalid'
+      );
+
+      if (error) {
+        error.textContent = '';
+      }
+    }
+
+    function clearAllErrors() {
+      clearFieldError(
+        'loginUsername'
+      );
+
+      clearFieldError(
+        'loginPassword'
+      );
+
+      hideLoginError();
+    }
+
+    function focusFirstInvalidField() {
+      const firstInvalid =
+        document.querySelector(
+          '.is-invalid'
+        );
+
+      if (firstInvalid) {
+        firstInvalid.focus();
+      }
+    }
+
+    function showLoginError(message) {
+      const errorBox =
+        document.getElementById(
+          'credentialLoginError'
+        );
+
+      errorBox.textContent =
+        String(message || '');
+
+      errorBox.classList.remove(
+        'is-hidden'
+      );
+    }
+
+    function hideLoginError() {
+      const errorBox =
+        document.getElementById(
+          'credentialLoginError'
+        );
+
+      errorBox.textContent = '';
+
+      errorBox.classList.add(
+        'is-hidden'
+      );
+    }
+
+    function loginErrorMessage(error) {
+      if (!error) {
+        return 'Unable to sign in. Please try again.';
+      }
+
+      const message =
+        typeof error === 'string'
+          ? error
+          : (
+              error.message ||
+              error.toString() ||
+              ''
+            );
+
+      return String(message)
+        .replace(
+          /^Exception:\s*/i,
+          ''
+        )
+        .replace(
+          /^Error:\s*/i,
+          ''
+        )
+        .trim() ||
+        'Unable to sign in. Please try again.';
+    }
+  })();
+</script>

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+
+    <?!= includeOutreachFile_('LoginStyles'); ?>
+  </head>
+
+  <body>
+    <div class="login-page">
+      <header class="login-header">
+        <div class="header-inner">
+          <div
+            class="brand-mark"
+            aria-hidden="true">
+            H
+          </div>
+
+          <div>
+            <span>Hugo Public Schools</span>
+            <h1>Student Support System</h1>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section class="login-card">
+          <div
+            class="login-card__accent"
+            aria-hidden="true">
+          </div>
+
+          <div class="login-heading">
+            <div
+              class="lock-icon"
+              aria-hidden="true">
+              &#128274;
+            </div>
+
+            <span class="eyebrow">
+              Hugo Public Schools
+            </span>
+
+            <h2>
+              Student Support Management Login
+            </h2>
+
+            <p>
+              Enter the username and password assigned
+              to your student support system account.
+            </p>
+          </div>
+
+          <form
+            id="credentialLoginForm"
+            class="credential-form"
+            novalidate>
+
+            <div class="field-group">
+              <label for="loginUsername">
+                Username
+              </label>
+
+              <input
+                id="loginUsername"
+                name="username"
+                type="text"
+                maxlength="40"
+                autocomplete="username"
+                autocapitalize="none"
+                spellcheck="false"
+                required>
+
+              <span
+                class="field-error"
+                data-error-for="loginUsername">
+              </span>
+            </div>
+
+            <div class="field-group">
+              <label for="loginPassword">
+                Password
+              </label>
+
+              <div class="password-field">
+                <input
+                  id="loginPassword"
+                  name="password"
+                  type="password"
+                  maxlength="256"
+                  autocomplete="current-password"
+                  required>
+
+                <button
+                  id="passwordToggleButton"
+                  class="password-toggle"
+                  type="button"
+                  aria-label="Show password">
+                  Show
+                </button>
+              </div>
+
+              <span
+                class="field-error"
+                data-error-for="loginPassword">
+              </span>
+            </div>
+
+            <div
+              id="credentialLoginError"
+              class="login-error is-hidden"
+              role="alert">
+            </div>
+
+            <button
+              id="credentialLoginButton"
+              class="button button--primary"
+              type="submit">
+
+              <span class="login-button-label">
+                Sign In
+              </span>
+
+              <span
+                class="login-button-loading is-hidden">
+
+                <span
+                  class="button-spinner"
+                  aria-hidden="true">
+                </span>
+
+                Signing in…
+              </span>
+            </button>
+          </form>
+
+          <div
+            id="loginSuccessSection"
+            class="login-success is-hidden"
+            aria-live="polite">
+
+            <div
+              class="login-success__icon"
+              aria-hidden="true">
+              &#10003;
+            </div>
+
+            <strong>Login successful</strong>
+
+            <p>
+              Your secure dashboard session is ready.
+            </p>
+
+            <a
+              id="dashboardContinueLink"
+              class="button button--primary"
+              href="#"
+              target="_top">
+              Continue to Dashboard
+            </a>
+          </div>
+
+          <a
+            class="referral-link"
+            href="https://script.google.com/macros/s/AKfycbyo_c3wRGFouzIRWljtzdA3tPxrouU7I-JJNNtydFp1u6l_FmhX2-7LVAJ0-SgFamCk/exec"
+            target="_top">
+            Return to the staff referral form
+          </a>
+        </section>
+      </main>
+
+      <footer>
+        <p>
+          Hugo Public Schools &middot;
+          Confidential student information system
+        </p>
+      </footer>
+    </div>
+
+    <?!= includeOutreachFile_('LoginScripts'); ?>
+  </body>
+</html>

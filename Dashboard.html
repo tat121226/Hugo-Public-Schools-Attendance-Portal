@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <?!= includeOutreachFile_('DashboardStyles'); ?>
+  </head>
+
+  <body data-session-token="<?= initialSessionToken ?>">
+    <div class="dashboard-shell">
+      <header class="dashboard-header">
+        <div class="header-inner">
+          <div class="dashboard-brand">
+            <div class="brand-mark" aria-hidden="true">H</div>
+            <div>
+              <span>Hugo Public Schools</span>
+              <h1>Student Outreach Dashboard</h1>
+            </div>
+          </div>
+
+          <div class="header-actions">
+            <a id="dashboardAttendanceLink" class="header-link is-hidden"
+              href="https://script.google.com/a/macros/hugoschools.com/s/AKfycbyo_c3wRGFouzIRWljtzdA3tPxrouU7I-JJNNtydFp1u6l_FmhX2-7LVAJ0-SgFamCk/exec?page=attendance"
+              target="_top">
+              Attendance Management
+            </a>
+            <a
+              class="header-link"
+              href="https://script.google.com/a/macros/hugoschools.com/s/AKfycbyo_c3wRGFouzIRWljtzdA3tPxrouU7I-JJNNtydFp1u6l_FmhX2-7LVAJ0-SgFamCk/exec?page=referral"
+              target="_top">
+              <span aria-hidden="true">&#43;</span>
+              Staff Referral Form
+            </a>
+            <button id="changePasswordButton" class="header-link" type="button">
+              <span aria-hidden="true">&#128273;</span>
+              Change Password
+            </button>
+            <button id="logoutButton" class="header-link header-link--logout" type="button">
+              <span aria-hidden="true">&#10140;</span>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <section id="dashboardLoading" class="dashboard-state" aria-live="polite">
+          <div class="spinner" aria-hidden="true"></div>
+          <h2>Loading outreach dashboard</h2>
+          <p>Verifying your permissions and loading referrals&hellip;</p>
+        </section>
+
+        <section id="dashboardAccessError" class="dashboard-state dashboard-state--error is-hidden" aria-live="assertive">
+          <div class="state-icon" aria-hidden="true">!</div>
+          <h2>Dashboard access unavailable</h2>
+          <p id="dashboardAccessMessage">Your account could not be verified.</p>
+          <a class="button button--secondary" href="?page=login">Return to Backend Login</a>
+        </section>
+
+        <div id="dashboardApp" class="is-hidden">
+          <section class="welcome-row">
+            <div>
+              <span class="eyebrow">Management portal</span>
+              <h2>Student outreach cases</h2>
+              <p id="dashboardWelcomeText">Review referrals, document follow-ups, and track assistance.</p>
+            </div>
+            <div class="user-card">
+              <div id="userInitials" class="user-avatar" aria-hidden="true">&mdash;</div>
+              <div>
+                <strong id="dashboardUserName">&mdash;</strong>
+                <span id="dashboardUserRole">&mdash;</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="stats-grid" aria-label="Referral summary">
+            <article class="stat-card stat-card--new">
+              <div class="stat-icon" aria-hidden="true">N</div>
+              <div>
+                <span>New referrals</span>
+                <strong id="statNew">&mdash;</strong>
+              </div>
+            </article>
+
+            <article class="stat-card stat-card--active">
+              <div class="stat-icon" aria-hidden="true">A</div>
+              <div>
+                <span>Active cases</span>
+                <strong id="statActive">&mdash;</strong>
+              </div>
+            </article>
+
+            <article class="stat-card stat-card--urgent">
+              <div class="stat-icon" aria-hidden="true">!</div>
+              <div>
+                <span>Urgent and open</span>
+                <strong id="statUrgent">&mdash;</strong>
+              </div>
+            </article>
+
+            <article class="stat-card stat-card--followup">
+              <div class="stat-icon" aria-hidden="true">F</div>
+              <div>
+                <span>Overdue follow-ups</span>
+                <strong id="statFollowUps">&mdash;</strong>
+              </div>
+            </article>
+
+            <article class="stat-card stat-card--closed">
+              <div class="stat-icon" aria-hidden="true">&#10003;</div>
+              <div>
+                <span>Closed cases</span>
+                <strong id="statClosed">&mdash;</strong>
+              </div>
+            </article>
+          </section>
+
+          <section class="filter-card">
+            <div class="filter-heading">
+              <div>
+                <h2>Find referrals</h2>
+                <p>Search by student, referral number, student ID, or submitting staff member.</p>
+              </div>
+              <button id="resetFiltersButton" class="text-button" type="button">Reset filters</button>
+            </div>
+
+            <div class="filter-grid">
+              <div class="field-group field-group--search">
+                <label for="filterSearch">Search</label>
+                <div class="search-input">
+                  <span aria-hidden="true">&#128269;</span>
+                  <input id="filterSearch" type="search" placeholder="Name, ID, referral number&hellip;" autocomplete="off">
+                </div>
+              </div>
+
+              <div id="campusFilterGroup" class="field-group">
+                <label for="filterCampus">Campus</label>
+                <select id="filterCampus">
+                  <option value="">All campuses</option>
+                </select>
+              </div>
+
+              <div class="field-group">
+                <label for="filterCategory">Type of need</label>
+                <select id="filterCategory">
+                  <option value="">All needs</option>
+                </select>
+              </div>
+
+              <div class="field-group">
+                <label for="filterUrgency">Urgency</label>
+                <select id="filterUrgency">
+                  <option value="">All urgency levels</option>
+                </select>
+              </div>
+
+              <div class="field-group">
+                <label for="filterStatus">Status</label>
+                <select id="filterStatus">
+                  <option value="">All statuses</option>
+                </select>
+              </div>
+
+              <div id="assigneeFilterGroup" class="field-group">
+                <label for="filterAssignee">Assigned to</label>
+                <select id="filterAssignee">
+                  <option value="">All assignees</option>
+                  <option value="__UNASSIGNED__">Unassigned</option>
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section id="reportsOnlyNotice" class="reports-notice is-hidden">
+            <div class="reports-notice__icon" aria-hidden="true">i</div>
+            <div>
+              <strong>Referral access restricted</strong>
+              <p>Only the District Administrator and Outreach Coordinator can view individual student referrals.</p>
+            </div>
+          </section>
+
+          <section id="caseListSection" class="case-list-card">
+            <div class="case-list-heading">
+              <div>
+                <h2>Referrals</h2>
+                <p><span id="caseCount">0</span> matching cases</p>
+              </div>
+              <button id="refreshDashboardButton" class="button button--secondary button--small" type="button">
+                Refresh
+              </button>
+            </div>
+
+            <div id="caseListLoading" class="inline-loading is-hidden" aria-live="polite">
+              <div class="spinner spinner--small" aria-hidden="true"></div>
+              <span>Loading referrals&hellip;</span>
+            </div>
+
+            <div id="caseListError" class="inline-error is-hidden" role="alert"></div>
+
+            <div id="caseTableWrap" class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Referral</th>
+                    <th>Student</th>
+                    <th>Campus</th>
+                    <th>Need</th>
+                    <th>Urgency</th>
+                    <th>Status</th>
+                    <th>Follow-up</th>
+                    <th><span class="sr-only">Open</span></th>
+                  </tr>
+                </thead>
+                <tbody id="caseTableBody"></tbody>
+              </table>
+            </div>
+
+            <div id="caseCards" class="case-cards"></div>
+
+            <div id="emptyCases" class="empty-state is-hidden">
+              <div aria-hidden="true">&#128269;</div>
+              <h3>No matching referrals</h3>
+              <p>Try changing or clearing the current filters.</p>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer>
+        <p>Hugo Public Schools &middot; Confidential student outreach management system</p>
+      </footer>
+    </div>
+
+    <div id="caseModal" class="modal-backdrop is-hidden" role="dialog" aria-modal="true"
+      aria-labelledby="caseModalTitle">
+      <div class="case-modal">
+        <header class="modal-header">
+          <div>
+            <span id="modalReferralId" class="eyebrow">Referral &mdash;</span>
+            <h2 id="caseModalTitle">Student referral</h2>
+            <div id="modalBadges" class="badge-row"></div>
+          </div>
+          <button id="closeCaseModalButton" class="icon-button" type="button" aria-label="Close case details">&times;</button>
+        </header>
+
+        <div id="caseModalLoading" class="modal-loading">
+          <div class="spinner" aria-hidden="true"></div>
+          <p>Loading case details&hellip;</p>
+        </div>
+
+        <div id="caseModalError" class="modal-error is-hidden" role="alert"></div>
+
+        <div id="caseModalContent" class="modal-content is-hidden">
+          <section class="detail-section">
+            <div class="detail-section__heading">
+              <span>1</span>
+              <h3>Student and referral information</h3>
+            </div>
+            <dl id="studentDetailGrid" class="detail-grid"></dl>
+          </section>
+
+          <section class="detail-section">
+            <div class="detail-section__heading">
+              <span>2</span>
+              <h3>Reported need</h3>
+            </div>
+            <div class="narrative-grid">
+              <article>
+                <h4>Situation description</h4>
+                <p id="detailSituation">&mdash;</p>
+              </article>
+              <article>
+                <h4>Assistance already provided</h4>
+                <p id="detailAssistance">&mdash;</p>
+              </article>
+            </div>
+          </section>
+
+          <section id="caseManagementSection" class="detail-section management-section">
+            <div class="detail-section__heading">
+              <span>3</span>
+              <h3>Manage case</h3>
+            </div>
+
+            <form id="caseUpdateForm">
+              <input id="caseReferralId" type="hidden">
+
+              <div class="management-grid">
+                <div class="field-group">
+                  <label for="caseAssignedTo">Assigned to</label>
+                  <select id="caseAssignedTo">
+                    <option value="">Unassigned</option>
+                  </select>
+                </div>
+
+                <div class="field-group">
+                  <label for="caseStatus">Status</label>
+                  <select id="caseStatus" required></select>
+                </div>
+
+                <div class="field-group">
+                  <label for="caseFollowUpDate">Follow-up date</label>
+                  <input id="caseFollowUpDate" type="date">
+                </div>
+
+                <div class="field-group field-group--full">
+                  <label for="caseNote">Case note</label>
+                  <textarea id="caseNote" rows="4" maxlength="3000"
+                    placeholder="Document contact attempts, assistance, or the next step."></textarea>
+                </div>
+
+                <div class="field-group field-group--full">
+                  <label for="caseResolutionSummary">Resolution summary</label>
+                  <textarea id="caseResolutionSummary" rows="4" maxlength="3000"
+                    placeholder="Required before closing the case."></textarea>
+                </div>
+              </div>
+
+              <div id="caseUpdateError" class="inline-error is-hidden" role="alert"></div>
+
+              <div class="management-actions">
+                <p>Each update is saved to the case history and audit log.</p>
+                <button id="saveCaseButton" class="button button--primary" type="submit">
+                  <span class="save-label">Save Case Update</span>
+                  <span class="save-loading is-hidden">
+                    <span class="button-spinner" aria-hidden="true"></span>
+                    Saving&hellip;
+                  </span>
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="detail-section">
+            <div class="detail-section__heading">
+              <span id="historySectionNumber">4</span>
+              <h3>Case history</h3>
+            </div>
+            <div id="caseHistory" class="timeline"></div>
+            <div id="emptyHistory" class="mini-empty is-hidden">No case updates have been recorded yet.</div>
+          </section>
+        </div>
+      </div>
+    </div>
+
+    <div id="passwordModal" class="modal-backdrop password-modal-backdrop is-hidden"
+      role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+      <div class="password-modal">
+        <header class="modal-header">
+          <div>
+            <span class="eyebrow">ACCOUNT SECURITY</span>
+            <h2 id="passwordModalTitle">Change Your Password</h2>
+          </div>
+          <button id="closePasswordModalButton" class="icon-button" type="button"
+            aria-label="Close change password form">&times;</button>
+        </header>
+
+        <form id="changePasswordForm" class="password-form">
+          <div class="field-group">
+            <label for="currentPassword">Current password</label>
+            <input id="currentPassword" type="password" maxlength="256"
+              autocomplete="current-password" required>
+          </div>
+
+          <div class="field-group">
+            <label for="newPassword">New password</label>
+            <input id="newPassword" type="password" minlength="8" maxlength="128"
+              autocomplete="new-password" required>
+          </div>
+
+          <div class="field-group">
+            <label for="confirmNewPassword">Confirm new password</label>
+            <input id="confirmNewPassword" type="password" minlength="8" maxlength="128"
+              autocomplete="new-password" required>
+          </div>
+
+          <p class="password-requirements">
+            Use at least 8 characters with at least one letter and one number.
+            After changing it, you will sign in again on every device.
+          </p>
+
+          <div id="passwordChangeError" class="inline-error is-hidden" role="alert"></div>
+
+          <div class="password-actions">
+            <button id="cancelPasswordChangeButton" class="button button--secondary"
+              type="button">Cancel</button>
+            <button id="savePasswordButton" class="button button--primary" type="submit">
+              Change Password
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <?!= includeOutreachFile_('DashboardScripts'); ?>
+  </body>
+</html>

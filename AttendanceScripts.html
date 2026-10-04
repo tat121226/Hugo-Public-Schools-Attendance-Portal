@@ -1,0 +1,3411 @@
+<script>
+  (function() {
+    'use strict';
+
+    var SESSION_STORAGE_KEY = 'hugoOutreachBackendSession';
+    var OUTREACH_ADMIN_URL = 'https://script.google.com/a/hugoschools.com/macros/s/AKfycbyo_c3wRGFouzIRWljtzdA3tPxrouU7I-JJNNtydFp1u6l_FmhX2-7LVAJ0-SgFamCk/exec';
+
+    var ROLE_LABELS = {
+      ATTENDANCE_CLERK: 'Attendance Clerk',
+      CAMPUS_ADMIN: 'Campus Administrator',
+      REPORTS_ONLY: 'Reports Only',
+      DISTRICT_ADMIN: 'District Administrator',
+      OUTREACH_COORDINATOR: 'Outreach Coordinator'
+    };
+
+    var DAY_NAMES = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday'
+    ];
+
+    var state = {
+      sessionToken: '',
+      bootstrap: null,
+      selectedStudents: {},
+      overviewStudents: [],
+      searchTimer: null,
+      loadingReport: false,
+      savingReport: false,
+      loadingOverview: false,
+      loadingInterventions: false,
+      savingInterventionNote: false,
+      interventionCases: [],
+      currentInterventionCaseId: '',
+      addingStudent: false,
+      loadingManagedStudents: false,
+      savingManagedStudent: false,
+      currentManagedStudentId: '',
+      changingPassword: false,
+      toastTimer: null
+    };
+
+    document.addEventListener(
+      'DOMContentLoaded',
+      initializeAttendance
+    );
+
+
+    function initializeAttendance() {
+      bindAttendanceEvents();
+      state.sessionToken = readSessionToken();
+
+      if (!state.sessionToken) {
+        showSystemError(
+          'A backend login is required before opening attendance.'
+        );
+        return;
+      }
+
+      storeSessionToken(state.sessionToken);
+
+      google.script.run
+        .withSuccessHandler(handleAttendanceBootstrap)
+        .withFailureHandler(handleBootstrapFailure)
+        .getAttendanceBootstrap(state.sessionToken);
+    }
+
+
+    function bindAttendanceEvents() {
+      byId('attendanceMenuButton')
+        .addEventListener('click', toggleNavigation);
+
+      byId('weeklyEntryTabButton')
+        .addEventListener('click', showWeeklyEntry);
+
+      byId('attendanceOverviewTabButton')
+        .addEventListener('click', showAttendanceOverview);
+
+      byId('attendanceInterventionsTabButton')
+        .addEventListener('click', showAttendanceInterventions);
+
+      byId('attendanceAddStudentButton')
+        .addEventListener('click', openAttendanceAddStudentModal);
+
+      byId('closeAttendanceAddStudentButton')
+        .addEventListener('click', closeAttendanceAddStudentModal);
+
+      byId('cancelAttendanceAddStudentButton')
+        .addEventListener('click', closeAttendanceAddStudentModal);
+
+      byId('attendanceAddStudentBackdrop')
+        .addEventListener('click', closeAttendanceAddStudentModal);
+
+      byId('attendanceAddStudentForm')
+        .addEventListener('submit', submitAttendanceStudent);
+
+      byId('attendanceManageStudentsButton')
+        .addEventListener('click', openAttendanceManageStudentsModal);
+
+      byId('closeAttendanceManageStudentsButton')
+        .addEventListener('click', closeAttendanceManageStudentsModal);
+
+      byId('attendanceManageStudentsBackdrop')
+        .addEventListener('click', closeAttendanceManageStudentsModal);
+
+      byId('attendanceManageSearchForm')
+        .addEventListener('submit', searchManagedStudents);
+
+      byId('attendanceManageStudentForm')
+        .addEventListener('submit', submitManagedStudent);
+
+      byId('backToManageStudentResultsButton')
+        .addEventListener('click', showManagedStudentSearchView);
+
+      byId('cancelManageStudentEditButton')
+        .addEventListener('click', showManagedStudentSearchView);
+
+      byId('manageStudentCampus')
+        .addEventListener('change', clearManagedStudentResults);
+
+      byId('attendanceLogoutButton')
+        .addEventListener('click', logoutAttendanceUser);
+
+      byId('attendanceChangePasswordButton')
+        .addEventListener('click', openAttendancePasswordModal);
+
+      byId('closeAttendancePasswordButton')
+        .addEventListener('click', closeAttendancePasswordModal);
+
+      byId('cancelAttendancePasswordButton')
+        .addEventListener('click', closeAttendancePasswordModal);
+
+      byId('attendancePasswordBackdrop')
+        .addEventListener('click', closeAttendancePasswordModal);
+
+      byId('attendancePasswordForm')
+        .addEventListener('submit', submitAttendancePasswordChange);
+
+      byId('loadWeeklyReportButton')
+        .addEventListener('click', loadWeeklyReport);
+
+      byId('saveWeeklyAttendanceButton')
+        .addEventListener('click', saveWeeklyReport);
+
+      byId('attendanceStudentSearchButton')
+        .addEventListener('click', searchStudents);
+
+      byId('loadAttendanceOverviewButton')
+        .addEventListener('click', loadAttendanceOverview);
+
+      byId('loadAttendanceInterventionsButton')
+        .addEventListener('click', loadAttendanceInterventions);
+
+      byId('interventionSearch')
+        .addEventListener('input', renderFilteredInterventionCases);
+
+      byId('closeAttendanceInterventionButton')
+        .addEventListener('click', closeAttendanceInterventionCase);
+
+      byId('attendanceInterventionModalBackdrop')
+        .addEventListener('click', closeAttendanceInterventionCase);
+
+      byId('saveAttendanceInterventionNoteButton')
+        .addEventListener('click', saveAttendanceInterventionNote);
+
+      byId('printAttendanceInterventionCaseButton')
+        .addEventListener('click', printAttendanceInterventionCase);
+
+      byId('closeStudentHistoryButton')
+        .addEventListener('click', closeStudentHistory);
+
+      byId('studentHistoryModalBackdrop')
+        .addEventListener('click', closeStudentHistory);
+
+      byId('attendanceStudentSearch')
+        .addEventListener('keydown', function(event) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            searchStudents();
+          }
+        });
+
+      byId('attendanceStudentSearch')
+        .addEventListener('input', function() {
+          window.clearTimeout(state.searchTimer);
+
+          state.searchTimer = window.setTimeout(
+            function() {
+              if (
+                valueOf(
+                  'attendanceStudentSearch'
+                ).length >= 2
+              ) {
+                searchStudents();
+              }
+            },
+            350
+          );
+        });
+
+      byId('attendanceWeekStart')
+        .addEventListener('change', function() {
+          hideMessage('weeklyAttendanceMessage');
+          updateWeekDisplay();
+        });
+
+      byId('attendanceCampus')
+        .addEventListener('change', function() {
+          clearStudentSearch();
+          hideMessage('weeklyAttendanceMessage');
+        });
+
+      byId('attendanceSchoolDays')
+        .addEventListener(
+          'change',
+          updateWeeklyTotals
+        );
+
+      byId('overviewStudentSearch')
+        .addEventListener(
+          'input',
+          renderFilteredOverviewStudents
+        );
+
+      document.addEventListener(
+        'keydown',
+        function(event) {
+          if (
+            event.key === 'Escape' &&
+            !byId('attendanceManageStudentsModal')
+              .classList.contains('is-hidden')
+          ) {
+            closeAttendanceManageStudentsModal();
+          } else if (
+            event.key === 'Escape' &&
+            !byId('attendanceAddStudentModal')
+              .classList.contains('is-hidden')
+          ) {
+            closeAttendanceAddStudentModal();
+          } else if (
+            event.key === 'Escape' &&
+            !byId('attendancePasswordModal')
+              .classList.contains('is-hidden')
+          ) {
+            closeAttendancePasswordModal();
+          } else if (
+            event.key === 'Escape' &&
+            !byId('studentHistoryModal')
+              .classList.contains('is-hidden')
+              ) {
+                closeStudentHistory();
+              } else if (
+                event.key === 'Escape' &&
+                !byId('attendanceInterventionModal')
+                  .classList.contains('is-hidden')
+              ) {
+                closeAttendanceInterventionCase();
+              }
+        }
+      );
+    }
+
+
+    function handleAttendanceBootstrap(response) {
+      if (
+        !response ||
+        response.success !== true
+      ) {
+        showSystemError(
+          'The attendance configuration could not be loaded.'
+        );
+        return;
+      }
+
+      state.bootstrap = response;
+
+      renderUser(response.user || {});
+      configureCampuses(response);
+      configureAttendancePermissions(response.permissions || {});
+      configureOverviewDates(
+        response.currentWeekStart
+      );
+
+      byId('attendanceWeekStart').value =
+        response.currentWeekStart || '';
+
+      updateWeekDisplay();
+
+      byId('attendanceLoading')
+        .classList.add('is-hidden');
+
+      byId('attendanceApplication')
+        .classList.remove('is-hidden');
+
+      if (response.permissions && response.permissions.canEnterAttendance) {
+        loadWeeklyReport();
+      } else {
+        showAttendanceOverview();
+      }
+    }
+
+
+    function handleBootstrapFailure(error) {
+      var message = errorMessage(error);
+
+      if (isSessionError(message)) {
+        clearStoredSessionToken();
+      }
+
+      showSystemError(message);
+    }
+
+
+    function renderUser(user) {
+      byId('attendanceUserName').textContent =
+        user.fullName ||
+        user.username ||
+        'Attendance User';
+
+      byId('attendanceUserRole').textContent =
+        ROLE_LABELS[user.role] ||
+        user.role ||
+        'Attendance';
+
+      if (['DISTRICT_ADMIN', 'OUTREACH_COORDINATOR']
+        .indexOf(user.role) !== -1) {
+        var dashboardLink =
+          byId('studentSupportDashboardLink');
+
+         dashboardLink.href =
+          OUTREACH_ADMIN_URL +
+          '?page=dashboard&session=' +
+          encodeURIComponent(
+           state.sessionToken
+        );
+
+        dashboardLink.classList.remove(
+          'is-hidden'
+        );
+
+        byId('staffReferralFormLink')
+          .classList.remove('is-hidden');
+      }
+    }
+
+
+    function configureAttendancePermissions(permissions) {
+      if (!permissions.canEnterAttendance) {
+        byId('weeklyEntryTabButton').classList.add('is-hidden');
+        byId('weeklyEntrySection').classList.add('is-hidden');
+      }
+
+      if (!permissions.canViewInterventions) {
+        byId('attendanceInterventionsTabButton').classList.add('is-hidden');
+        byId('attendanceInterventionsSection').classList.add('is-hidden');
+      }
+
+      if (permissions.canAddStudents) {
+        byId('attendanceAddStudentButton').classList.remove('is-hidden');
+      }
+
+      if (permissions.canManageStudents) {
+        byId('attendanceManageStudentsButton').classList.remove('is-hidden');
+      }
+
+      var canChangeCampusOrStatus =
+        Boolean(permissions.canChangeStudentCampusOrStatus);
+      byId('editStudentCampus').disabled = !canChangeCampusOrStatus;
+      byId('editStudentActive').disabled = !canChangeCampusOrStatus;
+    }
+
+
+    function configureCampuses(response) {
+      var entrySelect =
+        byId('attendanceCampus');
+
+      var overviewSelect =
+        byId('overviewCampus');
+
+      var interventionSelect =
+        byId('interventionCampus');
+
+      var addStudentSelect =
+        byId('newStudentCampus');
+
+      var manageStudentSelect =
+        byId('manageStudentCampus');
+
+      var editStudentSelect =
+        byId('editStudentCampus');
+
+      clearElement(entrySelect);
+      clearElement(addStudentSelect);
+      clearElement(manageStudentSelect);
+      clearElement(editStudentSelect);
+
+      (response.campuses || [])
+        .forEach(function(campus) {
+          appendOption(
+            entrySelect,
+            campus,
+            campus
+          );
+
+          appendOption(
+            overviewSelect,
+            campus,
+            campus
+          );
+
+          appendOption(
+            interventionSelect,
+            campus,
+            campus
+          );
+
+          appendOption(
+            addStudentSelect,
+            campus,
+            campus
+          );
+
+          appendOption(
+            manageStudentSelect,
+            campus,
+            campus
+          );
+
+          appendOption(
+            editStudentSelect,
+            campus,
+            campus
+          );
+        });
+
+      entrySelect.value =
+        response.defaultCampus || '';
+
+      addStudentSelect.value =
+        response.defaultCampus || '';
+
+      manageStudentSelect.value =
+        response.defaultCampus || '';
+
+      editStudentSelect.value =
+        response.defaultCampus || '';
+
+      if (
+        !response.permissions ||
+        !response.permissions.canViewAllCampuses
+      ) {
+        entrySelect.disabled = true;
+        addStudentSelect.disabled = true;
+        manageStudentSelect.disabled = true;
+        editStudentSelect.disabled = true;
+
+        byId('overviewCampusField')
+          .classList.add('is-hidden');
+
+            overviewSelect.value =
+              response.defaultCampus || '';
+
+            byId('interventionCampusField')
+              .classList.add('is-hidden');
+
+            interventionSelect.value =
+              response.defaultCampus || '';
+          }
+    }
+
+
+    function configureOverviewDates(
+      currentMonday
+    ) {
+      var end = currentMonday
+        ? addDateDays(currentMonday, 4)
+        : dateKey(new Date());
+
+      byId('overviewEndDate').value = end;
+
+      byId('overviewStartDate').value =
+        addDateDays(end, -89);
+    }
+
+
+    function loadWeeklyReport() {
+      if (
+        state.loadingReport ||
+        !state.bootstrap
+      ) {
+        return;
+      }
+
+      var weekStart =
+        valueOf('attendanceWeekStart');
+
+      var campus =
+        valueOf('attendanceCampus');
+
+      var validation =
+        validateWeekSelection(
+          weekStart,
+          campus
+        );
+
+      if (validation) {
+        showMessage(
+          'weeklyAttendanceMessage',
+          validation,
+          'error'
+        );
+        return;
+      }
+
+      state.loadingReport = true;
+
+      setButtonBusy(
+        'loadWeeklyReportButton',
+        true,
+        'Loading...'
+      );
+
+      hideMessage('weeklyAttendanceMessage');
+      clearStudentSearch();
+
+      google.script.run
+        .withSuccessHandler(
+          function(response) {
+            state.loadingReport = false;
+
+            setButtonBusy(
+              'loadWeeklyReportButton',
+              false,
+              'Load Week'
+            );
+
+            if (
+              !response ||
+              response.success !== true
+            ) {
+              showMessage(
+                'weeklyAttendanceMessage',
+                'The weekly report could not be loaded.',
+                'error'
+              );
+              return;
+            }
+
+            byId(
+              'attendanceSchoolDays'
+            ).value = String(
+              response.schoolDays || 5
+            );
+
+            state.selectedStudents = {};
+
+            (
+              response.absentStudents || []
+            ).forEach(function(item) {
+              state.selectedStudents[
+                item.studentId
+              ] = {
+                studentId: item.studentId,
+                fullName: item.fullName,
+                grade: item.grade,
+                campus: item.campus,
+
+                absentDates:
+                  arrayToDateMap(
+                    item.absentDates || []
+                  )
+              };
+            });
+
+            byId(
+              'weeklyEnrollmentTotal'
+            ).textContent = String(
+              response.totalEnrollment || 0
+            );
+
+            renderSelectedStudents();
+
+            setReportStatus(
+              Boolean(
+                response.reportSubmitted
+              )
+            );
+
+            updateWeekDisplay();
+
+            if (response.reportSubmitted) {
+              showToast(
+                'The saved weekly report was loaded.',
+                'success'
+              );
+            }
+          }
+        )
+        .withFailureHandler(
+          function(error) {
+            state.loadingReport = false;
+
+            setButtonBusy(
+              'loadWeeklyReportButton',
+              false,
+              'Load Week'
+            );
+
+            handleOperationError(
+              'weeklyAttendanceMessage',
+              error
+            );
+          }
+        )
+        .getWeeklyAttendanceReport(
+          state.sessionToken,
+          weekStart,
+          campus
+        );
+    }
+
+
+    function searchStudents() {
+      var search =
+        valueOf('attendanceStudentSearch');
+
+      var campus =
+        valueOf('attendanceCampus');
+
+      if (!campus) {
+        showSearchMessage(
+          'Select a campus before searching.',
+          'error'
+        );
+        return;
+      }
+
+      if (search.length < 2) {
+        showSearchMessage(
+          'Enter at least two letters or numbers.',
+          'error'
+        );
+
+        byId(
+          'attendanceStudentSearch'
+        ).focus();
+
+        return;
+      }
+
+      setButtonBusy(
+        'attendanceStudentSearchButton',
+        true,
+        'Searching...'
+      );
+
+      showSearchMessage(
+        'Searching students...',
+        ''
+      );
+
+      google.script.run
+        .withSuccessHandler(
+          function(response) {
+            setButtonBusy(
+              'attendanceStudentSearchButton',
+              false,
+              'Search'
+            );
+
+            renderStudentSearchResults(
+              response &&
+              response.students
+                ? response.students
+                : []
+            );
+          }
+        )
+        .withFailureHandler(
+          function(error) {
+            setButtonBusy(
+              'attendanceStudentSearchButton',
+              false,
+              'Search'
+            );
+
+            var message =
+              errorMessage(error);
+
+            if (isSessionError(message)) {
+              handleExpiredSession(message);
+              return;
+            }
+
+            showSearchMessage(
+              message,
+              'error'
+            );
+          }
+        )
+        .searchAttendanceStudents(
+          state.sessionToken,
+          campus,
+          search
+        );
+    }
+
+
+    function renderStudentSearchResults(
+      students
+    ) {
+      var container =
+        byId('attendanceSearchResults');
+
+      clearElement(container);
+
+      if (!students.length) {
+        container.classList.add(
+          'is-hidden'
+        );
+
+        showSearchMessage(
+          'No matching active students were found at this campus.',
+          ''
+        );
+
+        return;
+      }
+
+      hideMessage(
+        'attendanceSearchMessage'
+      );
+
+      container.classList.remove(
+        'is-hidden'
+      );
+
+      students.forEach(function(student) {
+        var button =
+          document.createElement('button');
+
+        button.type = 'button';
+        button.className =
+          'student-search-result';
+
+        var details =
+          document.createElement('span');
+
+        details.className =
+          'student-search-result__details';
+
+        details.appendChild(
+          textElement(
+            'strong',
+            student.fullName ||
+              'Unnamed Student'
+          )
+        );
+
+        details.appendChild(
+          textElement(
+            'span',
+            'ID: ' +
+              (student.studentId || '-') +
+              '  |  Grade: ' +
+              (student.grade || '-')
+          )
+        );
+
+        var action = textElement(
+          'span',
+          state.selectedStudents[
+            student.studentId
+          ]
+            ? 'Already Added'
+            : '+ Add Student',
+          'student-search-result__action'
+        );
+
+        button.appendChild(details);
+        button.appendChild(action);
+
+        button.disabled = Boolean(
+          state.selectedStudents[
+            student.studentId
+          ]
+        );
+
+        button.addEventListener(
+          'click',
+          function() {
+            addSelectedStudent(student);
+          }
+        );
+
+        container.appendChild(button);
+      });
+    }
+
+
+    function addSelectedStudent(student) {
+      if (
+        !student ||
+        !student.studentId ||
+        state.selectedStudents[
+          student.studentId
+        ]
+      ) {
+        return;
+      }
+
+      state.selectedStudents[
+        student.studentId
+      ] = {
+        studentId: student.studentId,
+        fullName: student.fullName,
+        grade: student.grade,
+        campus: student.campus,
+        absentDates: {}
+      };
+
+      renderSelectedStudents();
+      clearStudentSearch();
+
+      showToast(
+        (
+          student.fullName ||
+          'Student'
+        ) +
+          ' was added. Select the absent day or days.',
+        'success'
+      );
+    }
+
+
+    function renderSelectedStudents() {
+      var body =
+        byId('weeklyAttendanceTableBody');
+
+      var students = Object.keys(
+        state.selectedStudents
+      )
+        .map(function(studentId) {
+          return state.selectedStudents[
+            studentId
+          ];
+        })
+        .sort(function(a, b) {
+          return String(
+            a.fullName || ''
+          ).localeCompare(
+            String(b.fullName || '')
+          );
+        });
+
+      clearElement(body);
+
+      byId('noAbsentStudentsMessage')
+        .classList.toggle(
+          'is-hidden',
+          students.length > 0
+        );
+
+      byId(
+        'weeklyAttendanceTableContainer'
+      ).classList.toggle(
+        'is-hidden',
+        students.length === 0
+      );
+
+      var weekStart =
+        valueOf('attendanceWeekStart');
+
+      var weekDates =
+        validDateKey(weekStart)
+          ? weekDateKeys(weekStart)
+          : [];
+
+      students.forEach(function(student) {
+        var row =
+          document.createElement('tr');
+
+        var studentCell =
+          document.createElement('td');
+
+        studentCell.className =
+          'student-cell';
+
+        studentCell.appendChild(
+          textElement(
+            'strong',
+            student.fullName ||
+              'Unnamed Student'
+          )
+        );
+
+        studentCell.appendChild(
+          textElement(
+            'span',
+            'ID: ' +
+              (student.studentId || '-')
+          )
+        );
+
+        row.appendChild(studentCell);
+
+        row.appendChild(
+          textCell(student.grade || '-')
+        );
+
+        weekDates.forEach(
+          function(absenceDate, index) {
+            var cell =
+              document.createElement('td');
+
+            cell.className =
+              'attendance-day-cell';
+
+            var checkbox =
+              document.createElement('input');
+
+            checkbox.type = 'checkbox';
+            checkbox.className =
+              'attendance-checkbox';
+
+            checkbox.checked = Boolean(
+              student.absentDates[
+                absenceDate
+              ]
+            );
+
+            checkbox.setAttribute(
+              'aria-label',
+              student.fullName +
+                ' absent ' +
+                DAY_NAMES[index]
+            );
+
+            checkbox.addEventListener(
+              'change',
+              function() {
+                if (checkbox.checked) {
+                  student.absentDates[
+                    absenceDate
+                  ] = true;
+                } else {
+                  delete student.absentDates[
+                    absenceDate
+                  ];
+                }
+
+                updateWeeklyTotals();
+              }
+            );
+
+            cell.appendChild(checkbox);
+            row.appendChild(cell);
+          }
+        );
+
+        var removeCell =
+          document.createElement('td');
+
+        removeCell.style.textAlign =
+          'center';
+
+        var removeButton =
+          document.createElement('button');
+
+        removeButton.type = 'button';
+        removeButton.className =
+          'remove-student-button';
+
+        removeButton.textContent =
+          'Remove';
+
+        removeButton.addEventListener(
+          'click',
+          function() {
+            delete state.selectedStudents[
+              student.studentId
+            ];
+
+            renderSelectedStudents();
+          }
+        );
+
+        removeCell.appendChild(
+          removeButton
+        );
+
+        row.appendChild(removeCell);
+        body.appendChild(row);
+      });
+
+      updateWeeklyTotals();
+    }
+
+
+    function updateWeeklyTotals() {
+      var students = Object.keys(
+        state.selectedStudents
+      ).map(function(studentId) {
+        return state.selectedStudents[
+          studentId
+        ];
+      });
+
+      var absentStudents = 0;
+      var absentDays = 0;
+
+      students.forEach(function(student) {
+        var count = Object.keys(
+          student.absentDates || {}
+        ).length;
+
+        if (count) {
+          absentStudents += 1;
+        }
+
+        absentDays += count;
+      });
+
+      var enrollment = numberFromText(
+        byId(
+          'weeklyEnrollmentTotal'
+        ).textContent
+      );
+
+      var schoolDays = Number(
+        valueOf('attendanceSchoolDays') || 5
+      );
+
+      var possibleDays =
+        enrollment * schoolDays;
+
+      var presentDays = Math.max(
+        0,
+        possibleDays - absentDays
+      );
+
+      var rate = possibleDays
+        ? presentDays / possibleDays
+        : 0;
+
+      byId(
+        'weeklyAbsentStudentTotal'
+      ).textContent = String(
+        absentStudents
+      );
+
+      byId(
+        'weeklyAbsentDayTotal'
+      ).textContent = String(absentDays);
+
+      byId(
+        'weeklyAttendanceRate'
+      ).textContent = formatPercent(rate);
+    }
+
+
+    function saveWeeklyReport() {
+      if (
+        state.savingReport ||
+        !state.bootstrap
+      ) {
+        return;
+      }
+
+      var weekStart =
+        valueOf('attendanceWeekStart');
+
+      var campus =
+        valueOf('attendanceCampus');
+
+      var validation =
+        validateWeekSelection(
+          weekStart,
+          campus
+        );
+
+      if (validation) {
+        showMessage(
+          'weeklyAttendanceMessage',
+          validation,
+          'error'
+        );
+        return;
+      }
+
+      var absences = Object.keys(
+        state.selectedStudents
+      )
+        .map(function(studentId) {
+          var student =
+            state.selectedStudents[
+              studentId
+            ];
+
+          return {
+            studentId:
+              student.studentId,
+
+            absentDates:
+              Object.keys(
+                student.absentDates || {}
+              ).sort()
+          };
+        })
+        .filter(function(entry) {
+          return (
+            entry.absentDates.length > 0
+          );
+        });
+
+      state.savingReport = true;
+      setSaveButtonBusy(true);
+      hideMessage(
+        'weeklyAttendanceMessage'
+      );
+
+      google.script.run
+        .withSuccessHandler(
+          function(response) {
+            state.savingReport = false;
+            setSaveButtonBusy(false);
+
+            if (
+              !response ||
+              response.success !== true
+            ) {
+              showMessage(
+                'weeklyAttendanceMessage',
+                'The weekly report could not be saved.',
+                'error'
+              );
+              return;
+            }
+
+            setReportStatus(true);
+
+            showMessage(
+              'weeklyAttendanceMessage',
+              response.message ||
+                'Weekly attendance was saved successfully.',
+              'success'
+            );
+
+            showToast(
+              'Weekly attendance saved.',
+              'success'
+            );
+
+            loadWeeklyReport();
+          }
+        )
+        .withFailureHandler(
+          function(error) {
+            state.savingReport = false;
+            setSaveButtonBusy(false);
+
+            handleOperationError(
+              'weeklyAttendanceMessage',
+              error
+            );
+          }
+        )
+        .saveWeeklyAttendanceReport(
+          state.sessionToken,
+          {
+            campus: campus,
+            weekStart: weekStart,
+
+            schoolDays: Number(
+              valueOf(
+                'attendanceSchoolDays'
+              )
+            ),
+
+            absences: absences
+          }
+        );
+    }
+
+
+    function showWeeklyEntry() {
+      byId('weeklyEntrySection')
+        .classList.remove('is-hidden');
+
+      byId('attendanceOverviewSection')
+        .classList.add('is-hidden');
+
+      byId('attendanceInterventionsSection')
+        .classList.add('is-hidden');
+
+      byId('weeklyEntryTabButton')
+        .classList.add('is-active');
+
+      byId(
+        'attendanceOverviewTabButton'
+      ).classList.remove('is-active');
+
+      byId('attendanceInterventionsTabButton')
+        .classList.remove('is-active');
+
+      closeNavigationOnMobile();
+    }
+
+
+    function showAttendanceOverview() {
+      byId('weeklyEntrySection')
+        .classList.add('is-hidden');
+
+      byId('attendanceOverviewSection')
+        .classList.remove('is-hidden');
+
+      byId('attendanceInterventionsSection')
+        .classList.add('is-hidden');
+
+      byId('weeklyEntryTabButton')
+        .classList.remove('is-active');
+
+      byId(
+        'attendanceOverviewTabButton'
+      ).classList.add('is-active');
+
+      byId('attendanceInterventionsTabButton')
+        .classList.remove('is-active');
+
+      closeNavigationOnMobile();
+      loadAttendanceOverview();
+    }
+
+
+    function loadAttendanceOverview() {
+      if (
+        state.loadingOverview ||
+        !state.bootstrap
+      ) {
+        return;
+      }
+
+      state.loadingOverview = true;
+
+      setButtonBusy(
+        'loadAttendanceOverviewButton',
+        true,
+        'Loading...'
+      );
+
+      hideMessage(
+        'attendanceOverviewMessage'
+      );
+
+      google.script.run
+        .withSuccessHandler(
+          function(response) {
+            state.loadingOverview = false;
+
+            setButtonBusy(
+              'loadAttendanceOverviewButton',
+              false,
+              'View Attendance'
+            );
+
+            if (
+              !response ||
+              response.success !== true
+            ) {
+              showMessage(
+                'attendanceOverviewMessage',
+                'Attendance records could not be loaded.',
+                'error'
+              );
+              return;
+            }
+
+            renderAttendanceOverview(
+              response
+            );
+          }
+        )
+        .withFailureHandler(
+          function(error) {
+            state.loadingOverview = false;
+
+            setButtonBusy(
+              'loadAttendanceOverviewButton',
+              false,
+              'View Attendance'
+            );
+
+            handleOperationError(
+              'attendanceOverviewMessage',
+              error
+            );
+          }
+        )
+        .getAttendanceOverview(
+          state.sessionToken,
+          {
+            startDate:
+              valueOf(
+                'overviewStartDate'
+              ),
+
+            endDate:
+              valueOf(
+                'overviewEndDate'
+              ),
+
+            campus:
+              valueOf(
+                'overviewCampus'
+              )
+          }
+        );
+    }
+
+
+    function renderAttendanceOverview(
+      response
+    ) {
+      state.overviewStudents =
+        response.students || [];
+
+      byId(
+        'overviewReportTotal'
+      ).textContent = String(
+        response.totalReports || 0
+      );
+
+      byId(
+        'overviewAbsenceTotal'
+      ).textContent = String(
+        response.totalAbsences || 0
+      );
+
+      byId(
+        'overviewStudentTotal'
+      ).textContent = String(
+        state.overviewStudents.length
+      );
+
+      renderCampusSummaries(
+        response.campusSummaries || []
+      );
+
+      renderFilteredOverviewStudents();
+
+      renderRecentReports(
+        response.recentReports || []
+      );
+    }
+
+
+    function renderCampusSummaries(
+      summaries
+    ) {
+      var container =
+        byId('campusAttendanceSummary');
+
+      clearElement(container);
+
+      if (!summaries.length) {
+        container.appendChild(
+          textElement(
+            'p',
+            'No campus reports were found for this period.'
+          )
+        );
+
+        return;
+      }
+
+      summaries.forEach(
+        function(summary) {
+          var card =
+            document.createElement(
+              'article'
+            );
+
+          card.className =
+            'campus-summary-card';
+
+          card.appendChild(
+            textElement(
+              'h4',
+              summary.campus || 'Campus'
+            )
+          );
+
+          var list =
+            document.createElement('dl');
+
+          appendDefinition(
+            list,
+            'Weeks Submitted',
+            summary.submittedWeeks || 0
+          );
+
+          appendDefinition(
+            list,
+            'Possible Days',
+            summary.possibleDays || 0
+          );
+
+          appendDefinition(
+            list,
+            'Present Days',
+            summary.presentDays || 0
+          );
+
+          appendDefinition(
+            list,
+            'Absent Days',
+            summary.absentDays || 0
+          );
+
+          appendDefinition(
+            list,
+            'Attendance Rate',
+            formatPercent(
+              summary.attendanceRate
+            )
+          );
+
+          card.appendChild(list);
+          container.appendChild(card);
+        }
+      );
+    }
+
+
+    function renderFilteredOverviewStudents() {
+      var search = valueOf(
+        'overviewStudentSearch'
+      ).toLowerCase();
+
+      var students =
+        state.overviewStudents.filter(
+          function(student) {
+            if (!search) {
+              return true;
+            }
+
+            return [
+              student.fullName,
+              student.studentId,
+              student.campus,
+              student.grade
+            ]
+              .join(' ')
+              .toLowerCase()
+              .indexOf(search) !== -1;
+          }
+        );
+
+      var body =
+        byId('overviewStudentTableBody');
+
+      clearElement(body);
+
+      byId(
+        'noOverviewStudentsMessage'
+      ).classList.toggle(
+        'is-hidden',
+        students.length > 0
+      );
+
+      byId(
+        'overviewStudentTableContainer'
+      ).classList.toggle(
+        'is-hidden',
+        students.length === 0
+      );
+
+      students.forEach(function(student) {
+        var row =
+          document.createElement('tr');
+
+        row.appendChild(
+          textCell(
+            student.fullName || '-'
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            student.studentId || '-'
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            student.campus || '-'
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            student.grade || '-'
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            String(
+              student.absenceCount || 0
+            )
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            formatDate(
+              student.lastAbsence
+            )
+          )
+        );
+
+        var actionCell =
+          document.createElement('td');
+
+        var historyButton =
+          document.createElement(
+            'button'
+          );
+
+        historyButton.type = 'button';
+        historyButton.className =
+          'history-button';
+
+        historyButton.textContent =
+          'View History';
+
+        historyButton.addEventListener(
+          'click',
+          function() {
+            openStudentHistory(
+              student.studentId
+            );
+          }
+        );
+
+        actionCell.appendChild(
+          historyButton
+        );
+
+        row.appendChild(actionCell);
+        body.appendChild(row);
+      });
+    }
+
+
+    function renderRecentReports(reports) {
+      var body =
+        byId(
+          'recentWeeklyReportsTableBody'
+        );
+
+      clearElement(body);
+
+      if (!reports.length) {
+        var emptyRow =
+          document.createElement('tr');
+
+        var emptyCell =
+          document.createElement('td');
+
+        emptyCell.colSpan = 6;
+        emptyCell.textContent =
+          'No weekly reports were found for this period.';
+
+        emptyCell.style.textAlign =
+          'center';
+
+        emptyRow.appendChild(emptyCell);
+        body.appendChild(emptyRow);
+        return;
+      }
+
+      reports.forEach(function(report) {
+        var row =
+          document.createElement('tr');
+
+        row.appendChild(
+          textCell(
+            formatDate(
+              report.weekStart
+            ) +
+              ' - ' +
+              formatDate(
+                report.weekEnd
+              )
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            report.campus || '-'
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            String(
+              report.schoolDays || 0
+            )
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            String(
+              report.totalEnrollment || 0
+            )
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            String(
+              report.absentDays || 0
+            )
+          )
+        );
+
+        row.appendChild(
+          textCell(
+            formatPercent(
+              report.attendanceRate
+            )
+          )
+        );
+
+        body.appendChild(row);
+      });
+    }
+
+
+    function openStudentHistory(
+      studentId
+    ) {
+      var modal =
+        byId('studentHistoryModal');
+
+      clearElement(
+        byId('studentHistoryTableBody')
+      );
+
+      byId('studentHistoryLoading')
+        .classList.remove('is-hidden');
+
+      byId('studentHistoryEmpty')
+        .classList.add('is-hidden');
+
+      byId(
+        'studentHistoryTableContainer'
+      ).classList.add('is-hidden');
+
+      byId(
+        'studentHistoryTitle'
+      ).textContent =
+        'Attendance History';
+
+      byId(
+        'studentHistoryDetails'
+      ).textContent = '';
+
+      byId(
+        'studentHistoryAbsenceTotal'
+      ).textContent = '0';
+
+      modal.classList.remove('is-hidden');
+      document.body.style.overflow =
+        'hidden';
+
+      google.script.run
+        .withSuccessHandler(
+          renderStudentHistory
+        )
+        .withFailureHandler(
+          function(error) {
+            closeStudentHistory();
+
+            var message =
+              errorMessage(error);
+
+            if (isSessionError(message)) {
+              handleExpiredSession(
+                message
+              );
+              return;
+            }
+
+            showToast(
+              message,
+              'error'
+            );
+          }
+        )
+        .getAttendanceStudentHistory(
+          state.sessionToken,
+          studentId
+        );
+    }
+
+
+    function renderStudentHistory(
+      response
+    ) {
+      byId('studentHistoryLoading')
+        .classList.add('is-hidden');
+
+      if (
+        !response ||
+        response.success !== true
+      ) {
+        byId('studentHistoryEmpty')
+          .classList.remove('is-hidden');
+
+        return;
+      }
+
+      var student =
+        response.student || {};
+
+      var absences =
+        response.absences || [];
+
+      byId(
+        'studentHistoryTitle'
+      ).textContent =
+        student.fullName ||
+        'Attendance History';
+
+      byId(
+        'studentHistoryDetails'
+      ).textContent =
+        'ID: ' +
+        (student.studentId || '-') +
+        '  |  ' +
+        (student.campus || '-') +
+        '  |  Grade ' +
+        (student.grade || '-');
+
+      byId(
+        'studentHistoryAbsenceTotal'
+      ).textContent = String(
+        response.absenceCount || 0
+      );
+
+      byId('studentHistoryEmpty')
+        .classList.toggle(
+          'is-hidden',
+          absences.length > 0
+        );
+
+      byId(
+        'studentHistoryTableContainer'
+      ).classList.toggle(
+        'is-hidden',
+        absences.length === 0
+      );
+
+      var body =
+        byId('studentHistoryTableBody');
+
+      clearElement(body);
+
+      absences.forEach(
+        function(record) {
+          var row =
+            document.createElement('tr');
+
+          row.appendChild(
+            textCell(
+              formatDate(
+                record.absenceDate
+              )
+            )
+          );
+
+          row.appendChild(
+            textCell(
+              formatDate(
+                record.weekStart
+              )
+            )
+          );
+
+          row.appendChild(
+            textCell(
+              record.campus || '-'
+            )
+          );
+
+          body.appendChild(row);
+        }
+      );
+    }
+
+
+    function closeStudentHistory() {
+      byId('studentHistoryModal')
+        .classList.add('is-hidden');
+
+      document.body.style.overflow = '';
+    }
+
+
+    function showAttendanceInterventions() {
+      byId('weeklyEntrySection').classList.add('is-hidden');
+      byId('attendanceOverviewSection').classList.add('is-hidden');
+      byId('attendanceInterventionsSection').classList.remove('is-hidden');
+
+      byId('weeklyEntryTabButton').classList.remove('is-active');
+      byId('attendanceOverviewTabButton').classList.remove('is-active');
+      byId('attendanceInterventionsTabButton').classList.add('is-active');
+
+      closeNavigationOnMobile();
+      loadAttendanceInterventions();
+    }
+
+
+    function loadAttendanceInterventions() {
+      if (state.loadingInterventions || !state.bootstrap) {
+        return;
+      }
+
+      state.loadingInterventions = true;
+      setButtonBusy(
+        'loadAttendanceInterventionsButton',
+        true,
+        'Loading...'
+      );
+      hideMessage('attendanceInterventionsMessage');
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          state.loadingInterventions = false;
+          setButtonBusy(
+            'loadAttendanceInterventionsButton',
+            false,
+            'View Cases'
+          );
+
+          if (!response || response.success !== true) {
+            showMessage(
+              'attendanceInterventionsMessage',
+              'Attendance intervention cases could not be loaded.',
+              'error'
+            );
+            return;
+          }
+
+          state.interventionCases = response.cases || [];
+          var totals = response.totals || {};
+          byId('interventionOpenTotal').textContent = String(totals.open || 0);
+          byId('interventionEarlyTotal').textContent = String(totals.fourToFive || 0);
+          byId('interventionMiddleTotal').textContent = String(totals.sixToSeven || 0);
+          byId('interventionHighTotal').textContent = String(totals.eightPlus || 0);
+          byId('interventionFerpaTotal').textContent = String(totals.ferpaAdult || 0);
+          renderFilteredInterventionCases();
+        })
+        .withFailureHandler(function(error) {
+          state.loadingInterventions = false;
+          setButtonBusy(
+            'loadAttendanceInterventionsButton',
+            false,
+            'View Cases'
+          );
+          handleOperationError('attendanceInterventionsMessage', error);
+        })
+        .getAttendanceInterventions(
+          state.sessionToken,
+          {
+            referenceDate: valueOf('interventionReferenceDate'),
+            campus: valueOf('interventionCampus')
+          }
+        );
+    }
+
+
+    function renderFilteredInterventionCases() {
+      var search = valueOf('interventionSearch').toLowerCase();
+      var cases = state.interventionCases.filter(function(item) {
+        if (!search) return true;
+        return [item.studentName, item.studentId, item.campus, item.stage, item.ferpaStatus]
+          .join(' ')
+          .toLowerCase()
+          .indexOf(search) !== -1;
+      });
+
+      var body = byId('interventionCasesTableBody');
+      clearElement(body);
+      byId('noInterventionCasesMessage').classList.toggle(
+        'is-hidden',
+        cases.length > 0
+      );
+      byId('interventionCasesTableContainer').classList.toggle(
+        'is-hidden',
+        cases.length === 0
+      );
+
+      cases.forEach(function(item) {
+        var row = document.createElement('tr');
+        var studentCell = document.createElement('td');
+        studentCell.className = 'student-cell';
+        studentCell.appendChild(textElement('strong', item.studentName || '-'));
+        studentCell.appendChild(textElement('span', 'ID: ' + (item.studentId || '-')));
+        row.appendChild(studentCell);
+        row.appendChild(textCell(item.campus || '-'));
+        row.appendChild(textCell(item.grade || '-'));
+
+        var ferpaCell = document.createElement('td');
+        if (item.isAdult) {
+          ferpaCell.appendChild(textElement(
+            'span',
+            '18+ REVIEW',
+            'ferpa-badge ferpa-badge--adult'
+          ));
+        } else if (!item.dateOfBirth) {
+          ferpaCell.appendChild(textElement(
+            'span',
+            'DOB MISSING',
+            'ferpa-badge ferpa-badge--missing'
+          ));
+        } else {
+          ferpaCell.appendChild(textElement('span', 'MINOR', 'ferpa-badge'));
+        }
+        row.appendChild(ferpaCell);
+
+        var countCell = document.createElement('td');
+        countCell.appendChild(textElement(
+          'span',
+          String(item.absenceCount || 0),
+          'intervention-count' + (item.absenceCount >= 8 ? ' intervention-count--high' : '')
+        ));
+        row.appendChild(countCell);
+
+        var stageCell = document.createElement('td');
+        stageCell.appendChild(textElement('span', item.stage || '-', 'intervention-stage'));
+        row.appendChild(stageCell);
+        row.appendChild(textCell(formatDateTime(item.lastActivity)));
+
+        var actionCell = document.createElement('td');
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'history-button';
+        button.textContent = 'Open Case';
+        button.addEventListener('click', function() {
+          openAttendanceInterventionCase(item.caseId);
+        });
+        actionCell.appendChild(button);
+        row.appendChild(actionCell);
+        body.appendChild(row);
+      });
+    }
+
+
+    function openAttendanceInterventionCase(caseId) {
+      state.currentInterventionCaseId = caseId;
+      byId('attendanceInterventionModal').classList.remove('is-hidden');
+      byId('interventionCaseLoading').classList.remove('is-hidden');
+      byId('interventionCaseContent').classList.add('is-hidden');
+      document.body.style.overflow = 'hidden';
+      hideMessage('attendanceInterventionNoteMessage');
+
+      google.script.run
+        .withSuccessHandler(renderAttendanceInterventionCase)
+        .withFailureHandler(function(error) {
+          closeAttendanceInterventionCase();
+          var message = errorMessage(error);
+          if (isSessionError(message)) {
+            handleExpiredSession(message);
+            return;
+          }
+          showToast(message, 'error');
+        })
+        .getAttendanceInterventionCase(state.sessionToken, caseId);
+    }
+
+
+    function renderAttendanceInterventionCase(response) {
+      if (!response || response.success !== true) {
+        closeAttendanceInterventionCase();
+        showToast('The intervention case could not be loaded.', 'error');
+        return;
+      }
+
+      var item = response.case || {};
+      byId('interventionCaseLoading').classList.add('is-hidden');
+      byId('interventionCaseContent').classList.remove('is-hidden');
+      byId('interventionCaseTitle').textContent = item.studentName || 'Student Case';
+      byId('interventionCaseSubtitle').textContent =
+        'ID: ' + (item.studentId || '-') + '  |  ' +
+        (item.campus || '-') + '  |  Grade ' + (item.grade || '-') +
+        '  |  ' + (item.stage || 'Intervention');
+      byId('interventionParentName').textContent = item.parentGuardianName || 'Not listed';
+      byId('interventionParentPhone').textContent = item.parentGuardianPhone || 'Not listed';
+      byId('interventionAddress').textContent = item.address || 'Not listed';
+      byId('interventionAbsenceCount').textContent = String(item.absenceCount || 0);
+      byId('interventionStudentDob').textContent = item.dateOfBirth
+        ? formatDate(item.dateOfBirth)
+        : 'Not listed';
+      byId('interventionStudentAge').textContent =
+        item.age === null || item.age === undefined ? 'Unknown' : String(item.age);
+      byId('interventionFerpaAlert').classList.toggle('is-hidden', !item.isAdult);
+      byId('interventionDobMissingAlert').classList.toggle(
+        'is-hidden',
+        Boolean(item.dateOfBirth)
+      );
+      byId('interventionEventDate').value = dateKey(new Date());
+      renderInterventionTimeline(response.timeline || []);
+    }
+
+
+    function renderInterventionTimeline(entries) {
+      var container = byId('interventionTimeline');
+      clearElement(container);
+      byId('interventionTimelineEmpty').classList.toggle(
+        'is-hidden',
+        entries.length > 0
+      );
+
+      entries.forEach(function(entry) {
+        var article = document.createElement('article');
+        article.className = 'timeline-entry ' +
+          (entry.source === 'AUTOMATION'
+            ? 'timeline-entry--automatic'
+            : 'timeline-entry--staff');
+
+        var header = document.createElement('div');
+        header.className = 'timeline-entry__header';
+        header.appendChild(textElement('strong', entry.title || 'Timeline Entry'));
+        var time = textElement('time', formatDate(entry.eventDate));
+        header.appendChild(time);
+        article.appendChild(header);
+        article.appendChild(textElement(
+          'div',
+          (entry.source === 'AUTOMATION' ? 'Automatic record' : 'Staff record') +
+            '  |  Added by ' + (entry.createdBy || 'System') +
+            '  |  ' + formatDateTime(entry.createdAt),
+          'timeline-entry__meta'
+        ));
+        if (entry.details) article.appendChild(textElement('p', entry.details));
+
+        var details = document.createElement('div');
+        details.className = 'timeline-entry__details';
+        appendTimelineDetail(details, 'Contact Method', entry.contactMethod);
+        appendTimelineDetail(details, 'Contact With', entry.contactWith);
+        appendTimelineDetail(details, 'Outcome', entry.outcome);
+        appendTimelineDetail(details, 'Next Step', entry.nextStep);
+        appendTimelineDetail(
+          details,
+          'Follow-Up Date',
+          entry.followUpDate ? formatDate(entry.followUpDate) : ''
+        );
+        if (details.childNodes.length) article.appendChild(details);
+        container.appendChild(article);
+      });
+    }
+
+
+    function appendTimelineDetail(container, label, value) {
+      if (!value) return;
+      var row = document.createElement('div');
+      row.appendChild(textElement('strong', label + ': '));
+      row.appendChild(document.createTextNode(String(value)));
+      container.appendChild(row);
+    }
+
+
+    function saveAttendanceInterventionNote() {
+      if (state.savingInterventionNote || !state.currentInterventionCaseId) {
+        return;
+      }
+
+      var title = valueOf('interventionNoteType');
+      var notes = valueOf('interventionNotes');
+      if (!title || !notes) {
+        showMessage(
+          'attendanceInterventionNoteMessage',
+          'Select a follow-up type and enter notes.',
+          'error'
+        );
+        return;
+      }
+
+      state.savingInterventionNote = true;
+      setButtonBusy(
+        'saveAttendanceInterventionNoteButton',
+        true,
+        'Saving Permanent Entry...'
+      );
+      hideMessage('attendanceInterventionNoteMessage');
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          state.savingInterventionNote = false;
+          setButtonBusy(
+            'saveAttendanceInterventionNoteButton',
+            false,
+            'Save Permanent Timeline Entry'
+          );
+          clearInterventionNoteForm();
+          renderAttendanceInterventionCase(response);
+          showMessage(
+            'attendanceInterventionNoteMessage',
+            'The permanent timeline entry was saved.',
+            'success'
+          );
+          loadAttendanceInterventions();
+        })
+        .withFailureHandler(function(error) {
+          state.savingInterventionNote = false;
+          setButtonBusy(
+            'saveAttendanceInterventionNoteButton',
+            false,
+            'Save Permanent Timeline Entry'
+          );
+          handleOperationError('attendanceInterventionNoteMessage', error);
+        })
+        .addAttendanceInterventionNote(
+          state.sessionToken,
+          {
+            caseId: state.currentInterventionCaseId,
+            title: title,
+            eventDate: valueOf('interventionEventDate'),
+            contactMethod: valueOf('interventionContactMethod'),
+            contactWith: valueOf('interventionContactWith'),
+            details: notes,
+            outcome: valueOf('interventionOutcome'),
+            nextStep: valueOf('interventionNextStep'),
+            followUpDate: valueOf('interventionFollowUpDate')
+          }
+        );
+    }
+
+
+    function clearInterventionNoteForm() {
+      [
+        'interventionNoteType',
+        'interventionContactMethod',
+        'interventionContactWith',
+        'interventionNotes',
+        'interventionOutcome',
+        'interventionNextStep',
+        'interventionFollowUpDate'
+      ].forEach(function(id) {
+        byId(id).value = '';
+      });
+      byId('interventionEventDate').value = dateKey(new Date());
+    }
+
+
+    function closeAttendanceInterventionCase() {
+      byId('attendanceInterventionModal').classList.add('is-hidden');
+      document.body.style.overflow = '';
+      state.currentInterventionCaseId = '';
+    }
+
+
+    function printAttendanceInterventionCase() {
+      document.body.classList.add('printing-intervention');
+      window.print();
+      window.setTimeout(function() {
+        document.body.classList.remove('printing-intervention');
+      }, 250);
+    }
+
+
+    function formatDateTime(value) {
+      if (!value) return '-';
+      var date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+
+
+    function updateWeekDisplay() {
+      var start =
+        valueOf('attendanceWeekStart');
+
+      if (!validDateKey(start)) {
+        byId(
+          'attendanceWeekDateRange'
+        ).textContent =
+          'Select a reporting week to begin.';
+
+        return;
+      }
+
+      var dates =
+        weekDateKeys(start);
+
+      byId(
+        'attendanceWeekDateRange'
+      ).textContent =
+        formatDate(dates[0]) +
+        ' through ' +
+        formatDate(dates[4]);
+
+      DAY_NAMES.forEach(
+        function(day, index) {
+          var heading = byId(
+            day.toLowerCase() +
+              'Heading'
+          );
+
+          clearElement(heading);
+
+          heading.appendChild(
+            document.createTextNode(day)
+          );
+
+          heading.appendChild(
+            textElement(
+              'small',
+              shortDate(dates[index])
+            )
+          );
+        }
+      );
+    }
+
+
+    function validateWeekSelection(
+      weekStart,
+      campus
+    ) {
+      if (!validDateKey(weekStart)) {
+        return (
+          'Select the Monday of the ' +
+          'reporting week.'
+        );
+      }
+
+      if (
+        parseDateKey(
+          weekStart
+        ).getDay() !== 1
+      ) {
+        return (
+          'Week Beginning must be a Monday.'
+        );
+      }
+
+      if (!campus) {
+        return 'Select a campus.';
+      }
+
+      return '';
+    }
+
+
+    function setReportStatus(saved) {
+      var status =
+        byId('weeklyReportStatus');
+
+      status.textContent =
+        saved
+          ? 'Saved Report'
+          : 'New Report';
+
+      status.classList.toggle(
+        'report-status--saved',
+        saved
+      );
+
+      status.classList.toggle(
+        'report-status--new',
+        !saved
+      );
+    }
+
+
+    function clearStudentSearch() {
+      byId(
+        'attendanceStudentSearch'
+      ).value = '';
+
+      clearElement(
+        byId('attendanceSearchResults')
+      );
+
+      byId('attendanceSearchResults')
+        .classList.add('is-hidden');
+
+      hideMessage(
+        'attendanceSearchMessage'
+      );
+    }
+
+
+    function showSearchMessage(
+      message,
+      type
+    ) {
+      showMessage(
+        'attendanceSearchMessage',
+        message,
+        type
+      );
+    }
+
+
+    function setSaveButtonBusy(busy) {
+      var button =
+        byId(
+          'saveWeeklyAttendanceButton'
+        );
+
+      button.disabled = busy;
+
+      button
+        .querySelector(
+          '.save-button-label'
+        )
+        .classList.toggle(
+          'is-hidden',
+          busy
+        );
+
+      button
+        .querySelector(
+          '.save-button-loading'
+        )
+        .classList.toggle(
+          'is-hidden',
+          !busy
+        );
+    }
+
+
+    function setButtonBusy(
+      id,
+      busy,
+      label
+    ) {
+      var button = byId(id);
+      button.disabled = busy;
+      button.textContent = label;
+    }
+
+
+    function showMessage(
+      id,
+      message,
+      type
+    ) {
+      var element = byId(id);
+
+      element.textContent =
+        message || '';
+
+      element.classList.remove(
+        'is-hidden',
+        'is-error',
+        'is-success'
+      );
+
+      if (type === 'error') {
+        element.classList.add(
+          'is-error'
+        );
+      }
+
+      if (type === 'success') {
+        element.classList.add(
+          'is-success'
+        );
+      }
+    }
+
+
+    function hideMessage(id) {
+      var element = byId(id);
+
+      element.textContent = '';
+
+      element.classList.add(
+        'is-hidden'
+      );
+
+      element.classList.remove(
+        'is-error',
+        'is-success'
+      );
+    }
+
+
+    function handleOperationError(
+      messageId,
+      error
+    ) {
+      var message =
+        errorMessage(error);
+
+      if (isSessionError(message)) {
+        handleExpiredSession(message);
+        return;
+      }
+
+      showMessage(
+        messageId,
+        message,
+        'error'
+      );
+    }
+
+
+    function handleExpiredSession(message) {
+      clearStoredSessionToken();
+      state.sessionToken = '';
+
+      showSystemError(
+        message ||
+          'Your session expired. Please sign in again.'
+      );
+    }
+
+
+    function showSystemError(message) {
+      byId('attendanceLoading')
+        .classList.add('is-hidden');
+
+      byId('attendanceApplication')
+        .classList.add('is-hidden');
+
+      byId(
+        'attendanceSystemErrorMessage'
+      ).textContent =
+        message ||
+        'An unexpected error occurred.';
+
+      byId('attendanceSystemError')
+        .classList.remove('is-hidden');
+    }
+
+
+    function showToast(message, type) {
+      var toast =
+        byId('attendanceToast');
+
+      window.clearTimeout(
+        state.toastTimer
+      );
+
+      toast.textContent = message;
+
+      toast.classList.remove(
+        'is-hidden',
+        'is-success',
+        'is-error'
+      );
+
+      if (type === 'success') {
+        toast.classList.add(
+          'is-success'
+        );
+      }
+
+      if (type === 'error') {
+        toast.classList.add(
+          'is-error'
+        );
+      }
+
+      state.toastTimer =
+        window.setTimeout(
+          function() {
+            toast.classList.add(
+              'is-hidden'
+            );
+          },
+          3500
+        );
+    }
+
+
+    function toggleNavigation() {
+      var navigation =
+        byId('attendanceNavigation');
+
+      var open =
+        navigation.classList.toggle(
+          'is-open'
+        );
+
+      byId('attendanceMenuButton')
+        .setAttribute(
+          'aria-expanded',
+          String(open)
+        );
+    }
+
+
+    function closeNavigationOnMobile() {
+      byId('attendanceNavigation')
+        .classList.remove('is-open');
+
+      byId('attendanceMenuButton')
+        .setAttribute(
+          'aria-expanded',
+          'false'
+        );
+    }
+
+
+    function logoutAttendanceUser() {
+      var button =
+        byId('attendanceLogoutButton');
+
+      button.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(
+          function(response) {
+            clearStoredSessionToken();
+            state.sessionToken = '';
+
+            window.top.location.href =
+              response &&
+              response.loginUrl
+                ? response.loginUrl
+                : buildPageUrl(
+                    'login',
+                    false
+                  );
+          }
+        )
+        .withFailureHandler(
+          function() {
+            clearStoredSessionToken();
+            state.sessionToken = '';
+
+            window.top.location.href =
+              buildPageUrl(
+                'login',
+                false
+              );
+          }
+        )
+        .logoutBackendSession(
+          state.sessionToken
+        );
+    }
+
+
+    function openAttendanceAddStudentModal() {
+      var form = byId('attendanceAddStudentForm');
+      form.reset();
+      byId('newStudentState').value = 'OK';
+      byId('newStudentCampus').value =
+        state.bootstrap && state.bootstrap.defaultCampus
+          ? state.bootstrap.defaultCampus
+          : valueOf('attendanceCampus');
+      hideMessage('attendanceAddStudentMessage');
+      byId('attendanceAddStudentModal').classList.remove('is-hidden');
+      closeNavigationOnMobile();
+      window.setTimeout(function() {
+        byId('newStudentId').focus();
+      }, 0);
+    }
+
+
+    function closeAttendanceAddStudentModal() {
+      if (state.addingStudent) return;
+      byId('attendanceAddStudentModal').classList.add('is-hidden');
+      byId('attendanceAddStudentForm').reset();
+      byId('newStudentState').value = 'OK';
+      hideMessage('attendanceAddStudentMessage');
+    }
+
+
+    function submitAttendanceStudent(event) {
+      event.preventDefault();
+      if (state.addingStudent) return;
+
+      hideMessage('attendanceAddStudentMessage');
+
+      var student = {
+        studentId: valueOf('newStudentId'),
+        campus: valueOf('newStudentCampus'),
+        firstName: valueOf('newStudentFirstName'),
+        lastName: valueOf('newStudentLastName'),
+        grade: valueOf('newStudentGrade'),
+        dateOfBirth: valueOf('newStudentDateOfBirth'),
+        studentEmail: valueOf('newStudentEmail'),
+        parentGuardianName: valueOf('newStudentGuardianName'),
+        parentGuardianPhone: valueOf('newStudentGuardianPhone'),
+        streetAddress: valueOf('newStudentStreetAddress'),
+        city: valueOf('newStudentCity'),
+        state: valueOf('newStudentState'),
+        zipCode: valueOf('newStudentZipCode')
+      };
+
+      if (
+        !student.studentId ||
+        !student.firstName ||
+        !student.lastName ||
+        !student.grade ||
+        !student.campus ||
+        !student.dateOfBirth
+      ) {
+        showMessage(
+          'attendanceAddStudentMessage',
+          'Complete every required student field.',
+          'error'
+        );
+        return;
+      }
+
+      state.addingStudent = true;
+      setButtonBusy('saveAttendanceStudentButton', true, 'Adding...');
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          state.addingStudent = false;
+          setButtonBusy('saveAttendanceStudentButton', false, 'Add Student');
+
+          if (!response || response.success !== true) {
+            showMessage(
+              'attendanceAddStudentMessage',
+              response && response.message
+                ? response.message
+                : 'The student could not be added.',
+              'error'
+            );
+            return;
+          }
+
+          byId('attendanceAddStudentModal').classList.add('is-hidden');
+          byId('attendanceAddStudentForm').reset();
+          byId('newStudentState').value = 'OK';
+
+          byId('attendanceCampus').value = student.campus;
+          byId('attendanceStudentSearch').value = student.studentId;
+          searchStudents();
+          showToast(
+            response.message || 'The student was added successfully.',
+            'success'
+          );
+        })
+        .withFailureHandler(function(error) {
+          state.addingStudent = false;
+          setButtonBusy('saveAttendanceStudentButton', false, 'Add Student');
+          handleOperationError('attendanceAddStudentMessage', error);
+        })
+        .createAttendanceStudent(state.sessionToken, student);
+    }
+
+
+    function openAttendanceManageStudentsModal() {
+      state.currentManagedStudentId = '';
+      byId('attendanceManageSearchForm').reset();
+      byId('manageStudentCampus').value =
+        state.bootstrap && state.bootstrap.defaultCampus
+          ? state.bootstrap.defaultCampus
+          : valueOf('attendanceCampus');
+      clearManagedStudentResults();
+      showManagedStudentSearchView();
+      byId('attendanceManageStudentsModal').classList.remove('is-hidden');
+      closeNavigationOnMobile();
+      window.setTimeout(function() {
+        byId('manageStudentSearch').focus();
+      }, 0);
+    }
+
+
+    function closeAttendanceManageStudentsModal() {
+      if (state.loadingManagedStudents || state.savingManagedStudent) return;
+      state.currentManagedStudentId = '';
+      byId('attendanceManageStudentsModal').classList.add('is-hidden');
+      byId('attendanceManageSearchForm').reset();
+      byId('attendanceManageStudentForm').reset();
+      clearManagedStudentResults();
+      hideMessage('attendanceManageEditMessage');
+    }
+
+
+    function clearManagedStudentResults() {
+      clearElement(byId('attendanceManageStudentResults'));
+      byId('attendanceManageStudentEmpty').classList.add('is-hidden');
+      hideMessage('attendanceManageSearchMessage');
+    }
+
+
+    function showManagedStudentSearchView() {
+      state.currentManagedStudentId = '';
+      byId('attendanceManageEditView').classList.add('is-hidden');
+      byId('attendanceManageSearchView').classList.remove('is-hidden');
+      hideMessage('attendanceManageEditMessage');
+    }
+
+
+    function searchManagedStudents(event) {
+      if (event) event.preventDefault();
+      if (state.loadingManagedStudents) return;
+
+      var campus = valueOf('manageStudentCampus');
+      var query = valueOf('manageStudentSearch');
+      clearManagedStudentResults();
+
+      if (query.length < 2) {
+        showMessage(
+          'attendanceManageSearchMessage',
+          'Enter at least two characters of the student name or Student ID.',
+          'error'
+        );
+        return;
+      }
+
+      state.loadingManagedStudents = true;
+      setButtonBusy('manageStudentSearchButton', true, 'Searching...');
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          state.loadingManagedStudents = false;
+          setButtonBusy('manageStudentSearchButton', false, 'Search');
+          renderManagedStudentResults(
+            response && response.students ? response.students : []
+          );
+        })
+        .withFailureHandler(function(error) {
+          state.loadingManagedStudents = false;
+          setButtonBusy('manageStudentSearchButton', false, 'Search');
+          handleOperationError('attendanceManageSearchMessage', error);
+        })
+        .searchAttendanceStudentsForManagement(
+          state.sessionToken,
+          campus,
+          query
+        );
+    }
+
+
+    function renderManagedStudentResults(students) {
+      var container = byId('attendanceManageStudentResults');
+      clearElement(container);
+      byId('attendanceManageStudentEmpty').classList.toggle(
+        'is-hidden',
+        students.length > 0
+      );
+
+      students.forEach(function(student) {
+        var row = document.createElement('div');
+        row.className = 'student-search-result attendance-manage-result';
+
+        var details = document.createElement('div');
+        details.className = 'student-search-result__details';
+        details.appendChild(
+          textElement('strong', student.fullName || 'Student')
+        );
+        details.appendChild(
+          textElement(
+            'span',
+            'ID: ' + (student.studentId || '-') +
+              '  |  Grade: ' + (student.grade || '-') +
+              '  |  ' + (student.active ? 'Active' : 'Inactive')
+          )
+        );
+
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'button button--secondary';
+        button.textContent = 'Edit';
+        button.addEventListener('click', function() {
+          loadManagedStudent(student.studentId);
+        });
+
+        row.appendChild(details);
+        row.appendChild(button);
+        container.appendChild(row);
+      });
+    }
+
+
+    function loadManagedStudent(studentId) {
+      if (state.loadingManagedStudents || !studentId) return;
+
+      state.loadingManagedStudents = true;
+      showMessage(
+        'attendanceManageSearchMessage',
+        'Loading student record...',
+        ''
+      );
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          state.loadingManagedStudents = false;
+          hideMessage('attendanceManageSearchMessage');
+
+          if (!response || response.success !== true || !response.student) {
+            showMessage(
+              'attendanceManageSearchMessage',
+              'The student record could not be loaded.',
+              'error'
+            );
+            return;
+          }
+
+          populateManagedStudentForm(
+            response.student,
+            Boolean(response.canChangeCampusOrStatus)
+          );
+        })
+        .withFailureHandler(function(error) {
+          state.loadingManagedStudents = false;
+          handleOperationError('attendanceManageSearchMessage', error);
+        })
+        .getAttendanceStudentForManagement(
+          state.sessionToken,
+          studentId
+        );
+    }
+
+
+    function populateManagedStudentForm(student, canChangeCampusOrStatus) {
+      state.currentManagedStudentId = student.studentId || '';
+      byId('attendanceManageStudentForm').reset();
+      byId('editStudentId').value = student.studentId || '';
+      byId('editStudentCampus').value = student.campus || '';
+      byId('editStudentFirstName').value = student.firstName || '';
+      byId('editStudentLastName').value = student.lastName || '';
+      byId('editStudentGrade').value = student.grade || '';
+      byId('editStudentDateOfBirth').value = student.dateOfBirth || '';
+      byId('editStudentEmail').value = student.studentEmail || '';
+      byId('editStudentGuardianName').value = student.parentGuardianName || '';
+      byId('editStudentGuardianPhone').value = student.parentGuardianPhone || '';
+      byId('editStudentStreetAddress').value = student.streetAddress || '';
+      byId('editStudentCity').value = student.city || '';
+      byId('editStudentState').value = student.state || 'OK';
+      byId('editStudentZipCode').value = student.zipCode || '';
+      byId('editStudentActive').checked = Boolean(student.active);
+      byId('editStudentCampus').disabled = !canChangeCampusOrStatus;
+      byId('editStudentActive').disabled = !canChangeCampusOrStatus;
+
+      byId('manageStudentRecordName').textContent =
+        student.fullName || 'Student Record';
+      byId('manageStudentRecordDetails').textContent =
+        'Student ID: ' + (student.studentId || '-') +
+        '  |  Campus: ' + (student.campus || '-') +
+        '  |  ' + (student.active ? 'Active' : 'Inactive');
+
+      hideMessage('attendanceManageEditMessage');
+      byId('attendanceManageSearchView').classList.add('is-hidden');
+      byId('attendanceManageEditView').classList.remove('is-hidden');
+      byId('editStudentFirstName').focus();
+    }
+
+
+    function submitManagedStudent(event) {
+      event.preventDefault();
+      if (state.savingManagedStudent || !state.currentManagedStudentId) return;
+
+      var student = {
+        studentId: state.currentManagedStudentId,
+        campus: valueOf('editStudentCampus'),
+        firstName: valueOf('editStudentFirstName'),
+        lastName: valueOf('editStudentLastName'),
+        grade: valueOf('editStudentGrade'),
+        dateOfBirth: valueOf('editStudentDateOfBirth'),
+        studentEmail: valueOf('editStudentEmail'),
+        parentGuardianName: valueOf('editStudentGuardianName'),
+        parentGuardianPhone: valueOf('editStudentGuardianPhone'),
+        streetAddress: valueOf('editStudentStreetAddress'),
+        city: valueOf('editStudentCity'),
+        state: valueOf('editStudentState'),
+        zipCode: valueOf('editStudentZipCode'),
+        active: byId('editStudentActive').checked
+      };
+
+      if (
+        !student.firstName ||
+        !student.lastName ||
+        !student.grade ||
+        !student.campus ||
+        !student.dateOfBirth
+      ) {
+        showMessage(
+          'attendanceManageEditMessage',
+          'Complete every required student field.',
+          'error'
+        );
+        return;
+      }
+
+      hideMessage('attendanceManageEditMessage');
+      state.savingManagedStudent = true;
+      setButtonBusy('saveManagedStudentButton', true, 'Updating...');
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          state.savingManagedStudent = false;
+          setButtonBusy('saveManagedStudentButton', false, 'Update Student');
+
+          if (!response || response.success !== true) {
+            showMessage(
+              'attendanceManageEditMessage',
+              response && response.message
+                ? response.message
+                : 'The student could not be updated.',
+              'error'
+            );
+            return;
+          }
+
+          applyManagedStudentUpdateToPage(response.student || {});
+          byId('manageStudentCampus').value =
+            response.student && response.student.campus
+              ? response.student.campus
+              : student.campus;
+          byId('manageStudentSearch').value = student.studentId;
+          showManagedStudentSearchView();
+          searchManagedStudents();
+          showToast(
+            response.message || 'The student was updated successfully.',
+            'success'
+          );
+        })
+        .withFailureHandler(function(error) {
+          state.savingManagedStudent = false;
+          setButtonBusy('saveManagedStudentButton', false, 'Update Student');
+          handleOperationError('attendanceManageEditMessage', error);
+        })
+        .updateAttendanceStudent(state.sessionToken, student);
+    }
+
+
+    function applyManagedStudentUpdateToPage(student) {
+      if (!student || !student.studentId) return;
+
+      var selected = state.selectedStudents[student.studentId];
+      if (selected) {
+        if (
+          student.active &&
+          student.campus === valueOf('attendanceCampus')
+        ) {
+          selected.fullName = student.fullName;
+          selected.grade = student.grade;
+          selected.campus = student.campus;
+        } else {
+          delete state.selectedStudents[student.studentId];
+        }
+        renderSelectedStudents();
+        updateWeeklyTotals();
+      }
+
+      state.overviewStudents = state.overviewStudents.map(function(item) {
+        if (item.studentId !== student.studentId) return item;
+        item.fullName = student.fullName;
+        item.grade = student.grade;
+        item.campus = student.campus;
+        return item;
+      });
+      renderFilteredOverviewStudents();
+    }
+
+
+    function openAttendancePasswordModal() {
+      byId('attendancePasswordForm').reset();
+      hideMessage('attendancePasswordMessage');
+      byId('attendancePasswordModal').classList.remove('is-hidden');
+      closeNavigationOnMobile();
+      window.setTimeout(function() {
+        byId('attendanceCurrentPassword').focus();
+      }, 0);
+    }
+
+
+    function closeAttendancePasswordModal() {
+      if (state.changingPassword) return;
+      byId('attendancePasswordModal').classList.add('is-hidden');
+      byId('attendancePasswordForm').reset();
+      hideMessage('attendancePasswordMessage');
+    }
+
+
+    function submitAttendancePasswordChange(event) {
+      event.preventDefault();
+      if (state.changingPassword) return;
+
+      var currentPassword = byId('attendanceCurrentPassword').value;
+      var newPassword = byId('attendanceNewPassword').value;
+      var confirmPassword = byId('attendanceConfirmPassword').value;
+
+      hideMessage('attendancePasswordMessage');
+
+      if (newPassword !== confirmPassword) {
+        showMessage('attendancePasswordMessage', 'The new passwords do not match.', 'error');
+        return;
+      }
+
+      if (
+        newPassword.length < 8 ||
+        !/[A-Za-z]/.test(newPassword) ||
+        !/[0-9]/.test(newPassword)
+      ) {
+        showMessage(
+          'attendancePasswordMessage',
+          'Use at least 8 characters with at least one letter and one number.',
+          'error'
+        );
+        return;
+      }
+
+      state.changingPassword = true;
+      setButtonBusy('saveAttendancePasswordButton', true, 'Changing...');
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          state.changingPassword = false;
+          clearStoredSessionToken();
+          state.sessionToken = '';
+          window.alert(
+            response && response.message
+              ? response.message
+              : 'Your password was changed. Please sign in again.'
+          );
+          window.top.location.href = response && response.loginUrl
+            ? response.loginUrl
+            : buildPageUrl('login', false);
+        })
+        .withFailureHandler(function(error) {
+          state.changingPassword = false;
+          setButtonBusy('saveAttendancePasswordButton', false, 'Change Password');
+          handleOperationError('attendancePasswordMessage', error);
+        })
+        .changeBackendPassword(state.sessionToken, {
+          currentPassword: currentPassword,
+          newPassword: newPassword,
+          confirmPassword: confirmPassword
+        });
+    }
+
+
+    function readSessionToken() {
+      var match =
+        /(?:\?|&)session=([a-f0-9]{64})(?:&|$)/i.exec(
+          window.location.search || ''
+        );
+
+      if (match) {
+        return match[1].toLowerCase();
+      }
+
+      try {
+        return String(
+          window.localStorage.getItem(
+            SESSION_STORAGE_KEY
+          ) || ''
+        )
+          .trim()
+          .toLowerCase();
+      } catch (error) {
+        return '';
+      }
+    }
+
+
+    function storeSessionToken(token) {
+      try {
+        window.localStorage.setItem(
+          SESSION_STORAGE_KEY,
+          token
+        );
+      } catch (error) {
+        /*
+         * The token in the URL remains usable
+         * if local storage is unavailable.
+         */
+      }
+    }
+
+
+    function clearStoredSessionToken() {
+      try {
+        window.localStorage.removeItem(
+          SESSION_STORAGE_KEY
+        );
+      } catch (error) {
+        /*
+         * The server still validates
+         * every session.
+         */
+      }
+    }
+
+
+    function buildPageUrl(
+      pageName,
+      includeSession
+    ) {
+      var base = window.location.href
+        .split('?')[0]
+        .split('#')[0];
+
+      var url =
+        base +
+        '?page=' +
+        encodeURIComponent(pageName);
+
+      if (
+        includeSession !== false &&
+        state.sessionToken
+      ) {
+        url +=
+          '&session=' +
+          encodeURIComponent(
+            state.sessionToken
+          );
+      }
+
+      return url;
+    }
+
+
+    function appendOption(
+      select,
+      value,
+      label
+    ) {
+      var option =
+        document.createElement('option');
+
+      option.value = value;
+      option.textContent = label;
+
+      select.appendChild(option);
+    }
+
+
+    function appendDefinition(
+      list,
+      term,
+      value
+    ) {
+      var wrapper =
+        document.createElement('div');
+
+      wrapper.appendChild(
+        textElement('dt', term)
+      );
+
+      wrapper.appendChild(
+        textElement(
+          'dd',
+          String(value)
+        )
+      );
+
+      list.appendChild(wrapper);
+    }
+
+
+    function textElement(
+      tag,
+      text,
+      className
+    ) {
+      var element =
+        document.createElement(tag);
+
+      element.textContent =
+        text == null
+          ? ''
+          : String(text);
+
+      if (className) {
+        element.className =
+          className;
+      }
+
+      return element;
+    }
+
+
+    function textCell(text) {
+      var cell =
+        document.createElement('td');
+
+      cell.textContent =
+        text == null
+          ? ''
+          : String(text);
+
+      return cell;
+    }
+
+
+    function clearElement(element) {
+      while (element.firstChild) {
+        element.removeChild(
+          element.firstChild
+        );
+      }
+    }
+
+
+    function byId(id) {
+      return document.getElementById(id);
+    }
+
+
+    function valueOf(id) {
+      return String(
+        byId(id).value || ''
+      ).trim();
+    }
+
+
+    function numberFromText(value) {
+      var number = Number(
+        String(value || '')
+          .replace(/,/g, '')
+      );
+
+      return Number.isFinite(number)
+        ? number
+        : 0;
+    }
+
+
+    function arrayToDateMap(values) {
+      var map = {};
+
+      values.forEach(function(value) {
+        if (value) {
+          map[value] = true;
+        }
+      });
+
+      return map;
+    }
+
+
+    function weekDateKeys(monday) {
+      return [0, 1, 2, 3, 4]
+        .map(function(offset) {
+          return addDateDays(
+            monday,
+            offset
+          );
+        });
+    }
+
+
+    function validDateKey(value) {
+      return (
+        /^\d{4}-\d{2}-\d{2}$/.test(
+          String(value || '')
+        ) &&
+        !Number.isNaN(
+          parseDateKey(value).getTime()
+        )
+      );
+    }
+
+
+    function parseDateKey(value) {
+      var parts =
+        String(value || '')
+          .split('-');
+
+      return new Date(
+        Number(parts[0]),
+        Number(parts[1]) - 1,
+        Number(parts[2]),
+        12,
+        0,
+        0
+      );
+    }
+
+
+    function dateKey(date) {
+      return (
+        date.getFullYear() +
+        '-' +
+        pad2(date.getMonth() + 1) +
+        '-' +
+        pad2(date.getDate())
+      );
+    }
+
+
+    function addDateDays(
+      value,
+      days
+    ) {
+      var date =
+        typeof value === 'string'
+          ? parseDateKey(value)
+          : new Date(
+              value.getTime()
+            );
+
+      date.setDate(
+        date.getDate() + days
+      );
+
+      return dateKey(date);
+    }
+
+
+    function formatDate(value) {
+      if (!validDateKey(value)) {
+        return '-';
+      }
+
+      return parseDateKey(value)
+        .toLocaleDateString(
+          undefined,
+          {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          }
+        );
+    }
+
+
+    function shortDate(value) {
+      if (!validDateKey(value)) {
+        return '';
+      }
+
+      return parseDateKey(value)
+        .toLocaleDateString(
+          undefined,
+          {
+            month: 'numeric',
+            day: 'numeric'
+          }
+        );
+    }
+
+
+    function formatPercent(value) {
+      var number = Number(value);
+
+      return (
+        (
+          Number.isFinite(number)
+            ? number * 100
+            : 0
+        ).toFixed(2) +
+        '%'
+      );
+    }
+
+
+    function pad2(value) {
+      return value < 10
+        ? '0' + value
+        : String(value);
+    }
+
+
+    function isSessionError(message) {
+      return /session|sign in|login required|expired/i.test(
+        String(message || '')
+      );
+    }
+
+
+    function errorMessage(error) {
+      if (!error) {
+        return (
+          'An unexpected error occurred. ' +
+          'Please try again.'
+        );
+      }
+
+      var message =
+        typeof error === 'string'
+          ? error
+          : (
+              error.message ||
+              error.toString() ||
+              ''
+            );
+
+      return String(message)
+        .replace(
+          /^Exception:\s*/i,
+          ''
+        )
+        .replace(
+          /^Error:\s*/i,
+          ''
+        )
+        .trim() || (
+          'An unexpected error occurred. ' +
+          'Please try again.'
+        );
+    }
+  })();
+</script>

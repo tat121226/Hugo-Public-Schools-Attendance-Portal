@@ -1,0 +1,3 @@
+function runAttendanceNotificationCheck() {
+  return diagnoseAttendanceNotifications();
+}

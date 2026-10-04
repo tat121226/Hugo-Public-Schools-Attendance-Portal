@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+
+    <?!= includeOutreachFile_('Styles'); ?>
+  </head>
+
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <div
+          class="brand-mark"
+          aria-hidden="true">
+          H
+        </div>
+
+        <div class="brand-copy">
+          <span class="district-name">
+            Hugo Public Schools
+          </span>
+
+          <h1><?= appName ?></h1>
+        </div>
+
+        <a
+          class="backend-login-link"
+          href="https://script.google.com/a/hugoschools.com/macros/s/AKfycbyo_c3wRGFouzIRWljtzdA3tPxrouU7I-JJNNtydFp1u6l_FmhX2-7LVAJ0-SgFamCk/exec?page=login"
+          target="_top">
+
+          <span
+            class="backend-login-link__icon"
+            aria-hidden="true">
+            &#128274;
+          </span>
+
+          <span>Admin Login</span>
+        </a>
+      </header>
+
+      <main>
+        <section
+          id="loadingScreen"
+          class="state-card state-card--loading"
+          aria-live="polite">
+
+          <div
+            class="spinner"
+            aria-hidden="true">
+          </div>
+
+          <h2>Loading referral form</h2>
+
+          <p>
+            Loading referral form options…
+          </p>
+        </section>
+
+        <section
+          id="accessErrorScreen"
+          class="state-card state-card--error is-hidden"
+          aria-live="assertive">
+
+          <div
+            class="state-icon"
+            aria-hidden="true">
+            !
+          </div>
+
+          <h2>Unable to open the form</h2>
+
+          <p id="accessErrorMessage">
+            The referral form could not be loaded.
+          </p>
+
+          <button
+            class="button button--secondary"
+            type="button"
+            onclick="window.location.reload()">
+            Try Again
+          </button>
+        </section>
+
+        <div
+          id="formScreen"
+          class="is-hidden">
+
+          <section class="intro-card">
+            <div>
+              <span class="eyebrow">
+                Staff referral form
+              </span>
+
+              <h2>
+                Connect a student or family with support
+              </h2>
+
+              <p>
+                Use this form to notify the student Support
+                Specialist about a student or family who may
+                need assistance. Complete the form with the
+                information currently available.
+              </p>
+            </div>
+
+            <div class="privacy-badge">
+              <span
+                class="privacy-badge__icon"
+                aria-hidden="true">
+                &#128274;
+              </span>
+
+              <span>Staff referral</span>
+            </div>
+          </section>
+
+          <aside
+            class="important-notice"
+            role="note">
+
+            <div
+              class="important-notice__icon"
+              aria-hidden="true">
+              !
+            </div>
+
+            <div>
+              <strong>
+                Not for emergencies or safety concerns
+              </strong>
+
+              <p>
+                Do not use this form for an emergency,
+                immediate safety concern, suspected abuse or
+                neglect, threat, self-harm concern, or
+                mental-health crisis. Follow the appropriate
+                district and emergency reporting procedures
+                instead.
+              </p>
+            </div>
+          </aside>
+
+          <form
+            id="referralForm"
+            novalidate>
+
+            <section class="form-card">
+              <div class="section-heading">
+                <span class="section-number">1</span>
+
+                <div>
+                  <h2>Your information</h2>
+
+                  <p>
+                    Your name and email address will be
+                    recorded with this referral.
+                  </p>
+                </div>
+              </div>
+
+              <div class="field-grid field-grid--two">
+                <div class="field-group">
+                  <label for="reporterName">
+                    Your full name
+                    <span class="required">*</span>
+                  </label>
+
+                  <input
+                    id="reporterName"
+                    name="reporterName"
+                    type="text"
+                    maxlength="100"
+                    autocomplete="name"
+                    required>
+
+                  <span
+                    class="field-error"
+                    data-error-for="reporterName">
+                  </span>
+                </div>
+
+                <div class="field-group">
+                  <label for="reporterEmail">
+                    Your school email address
+                    <span class="required">*</span>
+                  </label>
+
+                  <input
+                    id="reporterEmail"
+                    name="reporterEmail"
+                    type="email"
+                    maxlength="150"
+                    autocomplete="email"
+                    placeholder="name@example.com"
+                    required>
+
+                  <span class="field-hint">
+                    Enter an email address where you can
+                    receive a confirmation.
+                  </span>
+
+                  <span
+                    class="field-error"
+                    data-error-for="reporterEmail">
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-card">
+              <div class="section-heading">
+                <span class="section-number">2</span>
+
+                <div>
+                  <h2>Student information</h2>
+
+                  <p>
+                    Enter enough information for the support
+                    specialist to identify the student.
+                  </p>
+                </div>
+              </div>
+
+              <div class="field-grid field-grid--two">
+                <div class="field-group">
+                  <label for="studentFirstName">
+                    Student first name
+                    <span class="required">*</span>
+                  </label>
+
+                  <input
+                    id="studentFirstName"
+                    name="studentFirstName"
+                    type="text"
+                    maxlength="75"
+                    autocomplete="off"
+                    required>
+
+                  <span
+                    class="field-error"
+                    data-error-for="studentFirstName">
+                  </span>
+                </div>
+
+                <div class="field-group">
+                  <label for="studentLastName">
+                    Student last name
+                    <span class="required">*</span>
+                  </label>
+
+                  <input
+                    id="studentLastName"
+                    name="studentLastName"
+                    type="text"
+                    maxlength="75"
+                    autocomplete="off"
+                    required>
+
+                  <span
+                    class="field-error"
+                    data-error-for="studentLastName">
+                  </span>
+                </div>
+
+                <div class="field-group">
+                  <label for="studentId">
+                    Student ID
+                    <span class="optional">Optional</span>
+                  </label>
+
+                  <input
+                    id="studentId"
+                    name="studentId"
+                    type="text"
+                    maxlength="30"
+                    inputmode="numeric"
+                    autocomplete="off">
+                </div>
+
+                <div class="field-group">
+                  <label for="grade">
+                    Grade
+                    <span class="required">*</span>
+                  </label>
+
+                  <select
+                    id="grade"
+                    name="grade"
+                    required>
+
+                    <option value="">
+                      Select grade
+                    </option>
+                  </select>
+
+                  <span
+                    class="field-error"
+                    data-error-for="grade">
+                  </span>
+                </div>
+
+                <div class="field-group field-group--full">
+                  <label for="campus">
+                    Campus
+                    <span class="required">*</span>
+                  </label>
+
+                  <select
+                    id="campus"
+                    name="campus"
+                    required>
+
+                    <option value="">
+                      Select campus
+                    </option>
+                  </select>
+
+                  <span
+                    class="field-error"
+                    data-error-for="campus">
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-card">
+              <div class="section-heading">
+                <span class="section-number">3</span>
+
+                <div>
+                  <h2>Student or family need</h2>
+
+                  <p>
+                    Describe the assistance that may be needed.
+                  </p>
+                </div>
+              </div>
+
+              <div class="field-grid field-grid--two">
+                <div class="field-group">
+                  <label for="needCategory">
+                    Type of need
+                    <span class="required">*</span>
+                  </label>
+
+                  <select
+                    id="needCategory"
+                    name="needCategory"
+                    required>
+
+                    <option value="">
+                      Select type of need
+                    </option>
+                  </select>
+
+                  <span
+                    class="field-error"
+                    data-error-for="needCategory">
+                  </span>
+                </div>
+
+                <div class="field-group">
+                  <label for="urgency">
+                    Urgency
+                    <span class="required">*</span>
+                  </label>
+
+                  <select
+                    id="urgency"
+                    name="urgency"
+                    required>
+
+                    <option value="">
+                      Select urgency
+                    </option>
+                  </select>
+
+                  <span class="field-hint">
+                    Urgent means assistance is needed as soon
+                    as reasonably possible.
+                  </span>
+
+                  <span
+                    class="field-error"
+                    data-error-for="urgency">
+                  </span>
+                </div>
+
+                <div class="field-group field-group--full">
+                  <label for="situationDescription">
+                    Description of the situation
+                    <span class="required">*</span>
+                  </label>
+
+                  <textarea
+                    id="situationDescription"
+                    name="situationDescription"
+                    rows="6"
+                    maxlength="3000"
+                    required
+                    placeholder="Explain what you observed or were told and what assistance may be needed."></textarea>
+
+                  <div class="field-meta">
+                    <span
+                      class="field-error"
+                      data-error-for="situationDescription">
+                    </span>
+
+                    <span
+                      id="descriptionCount"
+                      class="character-count">
+                      0 / 3000
+                    </span>
+                  </div>
+                </div>
+
+                <div class="field-group field-group--full">
+                  <label for="assistanceAlreadyProvided">
+                    Assistance already provided
+                    <span class="optional">Optional</span>
+                  </label>
+
+                  <textarea
+                    id="assistanceAlreadyProvided"
+                    name="assistanceAlreadyProvided"
+                    rows="4"
+                    maxlength="2000"
+                    placeholder="List any steps already taken by you, the campus, or another organization."></textarea>
+                </div>
+              </div>
+            </section>
+
+            <section class="form-card">
+              <div class="section-heading">
+                <span class="section-number">4</span>
+
+                <div>
+                  <h2>
+                    Parent or guardian information
+                  </h2>
+
+                  <p>
+                    Provide this information if it is known
+                    and appropriate to share.
+                  </p>
+                </div>
+              </div>
+
+              <div class="field-grid field-grid--two">
+                <div class="field-group">
+                  <label for="parentGuardianName">
+                    Parent or guardian name
+                    <span class="optional">Optional</span>
+                  </label>
+
+                  <input
+                    id="parentGuardianName"
+                    name="parentGuardianName"
+                    type="text"
+                    maxlength="100"
+                    autocomplete="off">
+                </div>
+
+                <div class="field-group">
+                  <label for="parentGuardianPhone">
+                    Parent or guardian phone
+                    <span class="optional">Optional</span>
+                  </label>
+
+                  <input
+                    id="parentGuardianPhone"
+                    name="parentGuardianPhone"
+                    type="tel"
+                    maxlength="40"
+                    autocomplete="off"
+                    inputmode="tel">
+                </div>
+              </div>
+            </section>
+
+            <section class="confirmation-card">
+              <label
+                class="checkbox-row"
+                for="acknowledgement">
+
+                <input
+                  id="acknowledgement"
+                  name="acknowledgement"
+                  type="checkbox"
+                  required>
+
+                <span>
+                  I understand that this form is not for
+                  emergencies, immediate safety concerns,
+                  suspected abuse or neglect, threats,
+                  self-harm concerns, or mental-health crises.
+                  <span class="required">*</span>
+                </span>
+              </label>
+
+              <span
+                class="field-error"
+                data-error-for="acknowledgement">
+              </span>
+            </section>
+
+            <div
+              id="submitError"
+              class="submit-error is-hidden"
+              role="alert">
+            </div>
+
+            <div class="form-actions">
+              <p>
+                <span class="required">*</span>
+                Required field
+              </p>
+
+              <button
+                id="submitButton"
+                class="button button--primary"
+                type="submit">
+
+                <span class="button__label">
+                  Submit Referral
+                </span>
+
+                <span class="button__loading is-hidden">
+                  <span
+                    class="button-spinner"
+                    aria-hidden="true">
+                  </span>
+
+                  Submitting…
+                </span>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <section
+          id="successScreen"
+          class="state-card state-card--success is-hidden"
+          aria-live="polite">
+
+          <div
+            class="success-check"
+            aria-hidden="true">
+            &#10003;
+          </div>
+
+          <span class="eyebrow">
+            Referral received
+          </span>
+
+          <h2>
+            Thank you for helping connect a student
+            with support.
+          </h2>
+
+          <p>
+            Your referral has been recorded for the
+            Support Specialist.
+          </p>
+
+          <div class="referral-number-card">
+            <span>Referral number</span>
+
+            <strong id="successReferralId">
+              —
+            </strong>
+          </div>
+
+          <p class="success-note">
+            Keep this referral number for your records.
+          </p>
+
+          <button
+            id="submitAnotherButton"
+            class="button button--secondary"
+            type="button">
+            Submit Another Referral
+          </button>
+        </section>
+      </main>
+
+      <footer>
+        <p>
+          Hugo Public Schools &middot;
+          Confidential staff reporting system
+        </p>
+      </footer>
+    </div>
+
+    <?!= includeOutreachFile_('StaffScripts'); ?>
+  </body>
+</html>

@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="UTF-8">
+
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+    <?!= includeOutreachFile_('AttendanceStyles'); ?>
+  </head>
+
+  <body>
+    <div class="attendance-page">
+
+      <!-- Loading screen -->
+      <div
+        id="attendanceLoading"
+        class="page-loading"
+        aria-live="polite">
+
+        <div
+          class="page-loading__spinner"
+          aria-hidden="true">
+        </div>
+
+        <strong>Opening Attendance Management</strong>
+
+        <span>
+          Loading your account and campus information…
+        </span>
+      </div>
+
+
+      <!-- System error -->
+      <div
+        id="attendanceSystemError"
+        class="system-error is-hidden"
+        role="alert">
+
+        <div
+          class="system-error__icon"
+          aria-hidden="true">
+          !
+        </div>
+
+        <h1>Unable to Open Attendance</h1>
+
+        <p id="attendanceSystemErrorMessage">
+          An unexpected error occurred.
+        </p>
+
+        <a
+          class="button button--primary"
+          href="?page=login"
+          target="_top">
+          Return to Login
+        </a>
+      </div>
+
+
+      <!-- Main attendance application -->
+      <div
+        id="attendanceApplication"
+        class="is-hidden">
+
+        <header class="attendance-header">
+          <div class="attendance-header__inner">
+
+            <div class="attendance-brand">
+              <div
+                class="attendance-brand__mark"
+                aria-hidden="true">
+                H
+              </div>
+
+              <div>
+                <span>Hugo Public Schools</span>
+                <h1>Attendance Management</h1>
+              </div>
+            </div>
+
+            <div class="attendance-user">
+              <div class="attendance-user__details">
+                <strong id="attendanceUserName">
+                  Attendance User
+                </strong>
+
+                <span id="attendanceUserRole">
+                  Attendance
+                </span>
+              </div>
+
+              <button
+                id="attendanceMenuButton"
+                class="menu-button"
+                type="button"
+                aria-label="Open navigation menu"
+                aria-expanded="false">
+                <span></span>
+                <span></span>
+                <span></span>
+              </button>
+            </div>
+          </div>
+
+          <nav
+            id="attendanceNavigation"
+            class="attendance-navigation">
+
+            <button
+              id="weeklyEntryTabButton"
+              class="navigation-button is-active"
+              type="button">
+              Weekly Entry
+            </button>
+
+            <button
+              id="attendanceOverviewTabButton"
+              class="navigation-button"
+              type="button">
+              Attendance Overview
+            </button>
+
+            <button
+              id="attendanceInterventionsTabButton"
+              class="navigation-button"
+              type="button">
+              Attendance Interventions
+            </button>
+
+            <button
+              id="attendanceAddStudentButton"
+              class="navigation-button is-hidden"
+              type="button">
+              + Add New Student
+            </button>
+
+            <button
+              id="attendanceManageStudentsButton"
+              class="navigation-button is-hidden"
+              type="button">
+              Manage Students
+            </button>
+
+            <a
+              id="studentSupportDashboardLink"
+              class="navigation-button is-hidden"
+              href="#"
+              target="_top">
+              Student Support Dashboard
+            </a>
+
+            <a
+              id="staffReferralFormLink"
+              class="navigation-button is-hidden"
+              href="https://script.google.com/macros/s/AKfycbyo_c3wRGFouzIRWljtzdA3tPxrouU7I-JJNNtydFp1u6l_FmhX2-7LVAJ0-SgFamCk/exec"
+              target="_top">
+              Staff Referral Form
+            </a>
+
+            <button
+              id="attendanceChangePasswordButton"
+              class="navigation-button"
+              type="button">
+              Change Password
+            </button>
+
+            <button
+              id="attendanceLogoutButton"
+              class="navigation-button navigation-button--logout"
+              type="button">
+              Log Out
+            </button>
+          </nav>
+        </header>
+
+
+        <main class="attendance-main">
+
+          <!-- Weekly attendance entry -->
+          <section
+            id="weeklyEntrySection"
+            class="attendance-section">
+
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">
+                  WEEKLY ATTENDANCE
+                </span>
+
+                <h2>Campus Attendance Report</h2>
+
+                <p>
+                  Select a week and add each student who
+                  was absent. Check every day the student
+                  was absent during that week.
+                </p>
+              </div>
+
+              <div
+                id="weeklyReportStatus"
+                class="report-status report-status--new">
+                New Report
+              </div>
+            </div>
+
+
+            <!-- Week settings -->
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Report Information</h3>
+
+                  <p>
+                    Each campus submits one report for
+                    each school week.
+                  </p>
+                </div>
+              </div>
+
+              <div class="report-settings">
+
+                <div class="field-group">
+                  <label for="attendanceWeekStart">
+                    Week Beginning
+                  </label>
+
+                  <input
+                    id="attendanceWeekStart"
+                    type="date"
+                    required>
+
+                  <small>
+                    Select the Monday of the reporting week.
+                  </small>
+                </div>
+
+                <div class="field-group">
+                  <label for="attendanceCampus">
+                    Campus
+                  </label>
+
+                  <select
+                    id="attendanceCampus"
+                    required>
+                  </select>
+                </div>
+
+                <div class="field-group">
+                  <label for="attendanceSchoolDays">
+                    Number of School Days
+                  </label>
+
+                  <select
+                    id="attendanceSchoolDays"
+                    required>
+                    <option value="5">5 days</option>
+                    <option value="4">4 days</option>
+                    <option value="3">3 days</option>
+                    <option value="2">2 days</option>
+                    <option value="1">1 day</option>
+                  </select>
+
+                  <small>
+                    Change this for holidays or shortened weeks.
+                  </small>
+                </div>
+
+                <div class="report-settings__action">
+                  <button
+                    id="loadWeeklyReportButton"
+                    class="button button--secondary"
+                    type="button">
+                    Load Week
+                  </button>
+                </div>
+              </div>
+            </section>
+
+
+            <!-- Weekly totals -->
+            <section
+              class="summary-grid"
+              aria-label="Weekly attendance summary">
+
+              <article class="summary-card">
+                <span>Total Enrollment</span>
+
+                <strong id="weeklyEnrollmentTotal">
+                  0
+                </strong>
+              </article>
+
+              <article class="summary-card">
+                <span>Students Absent</span>
+
+                <strong id="weeklyAbsentStudentTotal">
+                  0
+                </strong>
+              </article>
+
+              <article class="summary-card">
+                <span>Total Absent Days</span>
+
+                <strong id="weeklyAbsentDayTotal">
+                  0
+                </strong>
+              </article>
+
+              <article class="summary-card summary-card--rate">
+                <span>Weekly Attendance Rate</span>
+
+                <strong id="weeklyAttendanceRate">
+                  100.00%
+                </strong>
+              </article>
+            </section>
+
+
+            <!-- Student search -->
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Add an Absent Student</h3>
+
+                  <p>
+                    Search by student name or student ID.
+                  </p>
+                </div>
+              </div>
+
+              <div class="student-search">
+                <div class="student-search__field">
+                  <label
+                    class="sr-only"
+                    for="attendanceStudentSearch">
+                    Search students
+                  </label>
+
+                  <input
+                    id="attendanceStudentSearch"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Enter a student name or ID">
+                </div>
+
+                <button
+                  id="attendanceStudentSearchButton"
+                  class="button button--primary"
+                  type="button">
+                  Search
+                </button>
+              </div>
+
+              <div
+                id="attendanceSearchMessage"
+                class="inline-message is-hidden"
+                role="status">
+              </div>
+
+              <div
+                id="attendanceSearchResults"
+                class="student-search-results is-hidden">
+              </div>
+            </section>
+
+
+            <!-- Selected absent students -->
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Students Absent This Week</h3>
+
+                  <p id="attendanceWeekDateRange">
+                    Select a reporting week to begin.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                id="noAbsentStudentsMessage"
+                class="empty-state">
+
+                <div
+                  class="empty-state__icon"
+                  aria-hidden="true">
+                  ✓
+                </div>
+
+                <strong>No absent students added</strong>
+
+                <span>
+                  Search for a student above, then mark
+                  each day the student was absent.
+                </span>
+              </div>
+
+              <div
+                id="weeklyAttendanceTableContainer"
+                class="attendance-table-container is-hidden">
+
+                <table class="attendance-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Student</th>
+                      <th scope="col">Grade</th>
+
+                      <th
+                        id="mondayHeading"
+                        scope="col">
+                        Monday
+                      </th>
+
+                      <th
+                        id="tuesdayHeading"
+                        scope="col">
+                        Tuesday
+                      </th>
+
+                      <th
+                        id="wednesdayHeading"
+                        scope="col">
+                        Wednesday
+                      </th>
+
+                      <th
+                        id="thursdayHeading"
+                        scope="col">
+                        Thursday
+                      </th>
+
+                      <th
+                        id="fridayHeading"
+                        scope="col">
+                        Friday
+                      </th>
+
+                      <th
+                        class="attendance-table__remove-heading"
+                        scope="col">
+                        Remove
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody id="weeklyAttendanceTableBody">
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+
+            <!-- Save report -->
+            <section class="save-panel">
+              <div>
+                <strong>Weekly Report</strong>
+
+                <span>
+                  You can return later and update this
+                  report if attendance information changes.
+                </span>
+              </div>
+
+              <button
+                id="saveWeeklyAttendanceButton"
+                class="button button--primary button--large"
+                type="button">
+
+                <span class="save-button-label">
+                  Save Weekly Attendance
+                </span>
+
+                <span
+                  class="save-button-loading is-hidden">
+
+                  <span
+                    class="button-spinner"
+                    aria-hidden="true">
+                  </span>
+
+                  Saving…
+                </span>
+              </button>
+            </section>
+
+            <div
+              id="weeklyAttendanceMessage"
+              class="form-message is-hidden"
+              role="alert">
+            </div>
+          </section>
+
+
+          <!-- Attendance overview -->
+          <section
+            id="attendanceOverviewSection"
+            class="attendance-section is-hidden">
+
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">
+                  ATTENDANCE RECORDS
+                </span>
+
+                <h2>Attendance Overview</h2>
+
+                <p>
+                  Review campus totals and track each
+                  student's accumulated absences.
+                </p>
+              </div>
+            </div>
+
+
+            <!-- Overview filters -->
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Report Filters</h3>
+
+                  <p>
+                    Choose a date range and campus.
+                  </p>
+                </div>
+              </div>
+
+              <div class="overview-filters">
+
+                <div class="field-group">
+                  <label for="overviewStartDate">
+                    Start Date
+                  </label>
+
+                  <input
+                    id="overviewStartDate"
+                    type="date">
+                </div>
+
+                <div class="field-group">
+                  <label for="overviewEndDate">
+                    End Date
+                  </label>
+
+                  <input
+                    id="overviewEndDate"
+                    type="date">
+                </div>
+
+                <div
+                  id="overviewCampusField"
+                  class="field-group">
+                  <label for="overviewCampus">
+                    Campus
+                  </label>
+
+                  <select id="overviewCampus">
+                    <option value="">
+                      All Campuses
+                    </option>
+                  </select>
+                </div>
+
+                <div class="overview-filters__action">
+                  <button
+                    id="loadAttendanceOverviewButton"
+                    class="button button--primary"
+                    type="button">
+                    View Attendance
+                  </button>
+                </div>
+              </div>
+            </section>
+
+
+            <!-- Overview summary -->
+            <section
+              id="attendanceOverviewSummary"
+              class="summary-grid">
+
+              <article class="summary-card">
+                <span>Reports Submitted</span>
+
+                <strong id="overviewReportTotal">
+                  0
+                </strong>
+              </article>
+
+              <article class="summary-card">
+                <span>Total Absent Days</span>
+
+                <strong id="overviewAbsenceTotal">
+                  0
+                </strong>
+              </article>
+
+              <article class="summary-card">
+                <span>Students With Absences</span>
+
+                <strong id="overviewStudentTotal">
+                  0
+                </strong>
+              </article>
+            </section>
+
+
+            <!-- Campus summaries -->
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Campus Summary</h3>
+
+                  <p>
+                    Attendance totals for the selected period.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                id="campusAttendanceSummary"
+                class="campus-summary-grid">
+              </div>
+            </section>
+
+
+            <!-- Student absence totals -->
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Student Absence Totals</h3>
+
+                  <p>
+                    Select a student to review their
+                    attendance history.
+                  </p>
+                </div>
+
+                <div class="table-search">
+                  <label
+                    class="sr-only"
+                    for="overviewStudentSearch">
+                    Filter students
+                  </label>
+
+                  <input
+                    id="overviewStudentSearch"
+                    type="search"
+                    placeholder="Filter students">
+                </div>
+              </div>
+
+              <div
+                id="noOverviewStudentsMessage"
+                class="empty-state is-hidden">
+                <strong>No attendance records found</strong>
+
+                <span>
+                  No student absences were found for
+                  the selected date range.
+                </span>
+              </div>
+
+              <div
+                id="overviewStudentTableContainer"
+                class="attendance-table-container">
+
+                <table class="attendance-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Student</th>
+                      <th scope="col">Student ID</th>
+                      <th scope="col">Campus</th>
+                      <th scope="col">Grade</th>
+                      <th scope="col">Absent Days</th>
+                      <th scope="col">Last Absence</th>
+                      <th scope="col">History</th>
+                    </tr>
+                  </thead>
+
+                  <tbody id="overviewStudentTableBody">
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+
+            <!-- Recent weekly reports -->
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Recent Weekly Reports</h3>
+
+                  <p>
+                    The most recently submitted campus reports.
+                  </p>
+                </div>
+              </div>
+
+              <div class="attendance-table-container">
+                <table class="attendance-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Week</th>
+                      <th scope="col">Campus</th>
+                      <th scope="col">School Days</th>
+                      <th scope="col">Enrollment</th>
+                      <th scope="col">Absent Days</th>
+                      <th scope="col">Attendance Rate</th>
+                    </tr>
+                  </thead>
+
+                  <tbody id="recentWeeklyReportsTableBody">
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <div
+              id="attendanceOverviewMessage"
+              class="form-message is-hidden"
+              role="alert">
+            </div>
+          </section>
+
+
+          <!-- Attendance intervention cases -->
+          <section
+            id="attendanceInterventionsSection"
+            class="attendance-section is-hidden">
+
+            <div class="page-heading">
+              <div>
+                <span class="eyebrow">ATTENDANCE FOLLOW-UP</span>
+                <h2>Attendance Interventions</h2>
+                <p>
+                  Review students with four or more semester absences and
+                  document every contact, visit, referral, and outcome.
+                </p>
+              </div>
+            </div>
+
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Intervention Filters</h3>
+                  <p>Cases are organized by semester and campus.</p>
+                </div>
+              </div>
+
+              <div class="intervention-filters">
+                <div class="field-group">
+                  <label for="interventionReferenceDate">Semester</label>
+                  <select id="interventionReferenceDate">
+                    <option value="2026-08-06">First Semester 2026-2027</option>
+                    <option value="2027-01-05">Second Semester 2026-2027</option>
+                  </select>
+                </div>
+
+                <div id="interventionCampusField" class="field-group">
+                  <label for="interventionCampus">Campus</label>
+                  <select id="interventionCampus">
+                    <option value="">All Campuses</option>
+                  </select>
+                </div>
+
+                <div class="field-group">
+                  <label for="interventionSearch">Search Cases</label>
+                  <input
+                    id="interventionSearch"
+                    type="search"
+                    placeholder="Student name or ID">
+                </div>
+
+                <div class="intervention-filters__action">
+                  <button
+                    id="loadAttendanceInterventionsButton"
+                    class="button button--primary"
+                    type="button">
+                    View Cases
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="summary-grid intervention-summary-grid">
+              <article class="summary-card">
+                <span>Open Cases</span>
+                <strong id="interventionOpenTotal">0</strong>
+              </article>
+              <article class="summary-card">
+                <span>4-5 Absences</span>
+                <strong id="interventionEarlyTotal">0</strong>
+              </article>
+              <article class="summary-card">
+                <span>6-7 Absences</span>
+                <strong id="interventionMiddleTotal">0</strong>
+              </article>
+              <article class="summary-card summary-card--rate">
+                <span>8+ Absences</span>
+                <strong id="interventionHighTotal">0</strong>
+              </article>
+              <article class="summary-card summary-card--ferpa">
+                <span>FERPA: Age 18+</span>
+                <strong id="interventionFerpaTotal">0</strong>
+              </article>
+            </section>
+
+            <section class="content-card">
+              <div class="content-card__heading">
+                <div>
+                  <h3>Student Intervention Cases</h3>
+                  <p>Select a student to review or add to the timeline.</p>
+                </div>
+              </div>
+
+              <div id="noInterventionCasesMessage" class="empty-state is-hidden">
+                <strong>No intervention cases found</strong>
+                <span>No students have reached four absences for this selection.</span>
+              </div>
+
+              <div id="interventionCasesTableContainer" class="attendance-table-container">
+                <table class="attendance-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Student</th>
+                      <th scope="col">Campus</th>
+                      <th scope="col">Grade</th>
+                      <th scope="col">FERPA</th>
+                      <th scope="col">Absences</th>
+                      <th scope="col">Current Stage</th>
+                      <th scope="col">Last Activity</th>
+                      <th scope="col">Case</th>
+                    </tr>
+                  </thead>
+                  <tbody id="interventionCasesTableBody"></tbody>
+                </table>
+              </div>
+
+              <div
+                id="attendanceInterventionsMessage"
+                class="form-message is-hidden"
+                role="alert">
+              </div>
+            </section>
+          </section>
+        </main>
+
+
+        <footer class="attendance-footer">
+          <p>
+            Hugo Public Schools &middot;
+            Confidential student information system
+          </p>
+        </footer>
+      </div>
+
+
+      <!-- Attendance intervention case modal -->
+      <div
+        id="attendanceInterventionModal"
+        class="modal intervention-modal is-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="interventionCaseTitle">
+
+        <div id="attendanceInterventionModalBackdrop" class="modal__backdrop"></div>
+
+        <div class="modal__panel intervention-modal__panel">
+          <div class="modal__header">
+            <div>
+              <span class="eyebrow">ATTENDANCE INTERVENTION CASE</span>
+              <h2 id="interventionCaseTitle">Student Case</h2>
+              <p id="interventionCaseSubtitle"></p>
+            </div>
+            <button
+              id="closeAttendanceInterventionButton"
+              class="modal__close"
+              type="button"
+              aria-label="Close intervention case">
+              &times;
+            </button>
+          </div>
+
+          <div class="modal__body intervention-modal__body">
+            <div id="interventionCaseLoading" class="inline-loading">
+              Loading intervention case…
+            </div>
+
+            <div id="interventionCaseContent" class="is-hidden">
+              <div id="interventionFerpaAlert" class="ferpa-alert is-hidden" role="alert">
+                <strong>FERPA ALERT — ELIGIBLE STUDENT (AGE 18+)</strong>
+                <span>
+                  Date of birth: <b id="interventionStudentDob">—</b> ·
+                  Age: <b id="interventionStudentAge">—</b>
+                </span>
+                <span>
+                  Verify student consent or another applicable FERPA exception and
+                  district policy before releasing education-record information to a
+                  parent/guardian.
+                </span>
+              </div>
+              <div id="interventionDobMissingAlert" class="ferpa-alert ferpa-alert--missing is-hidden" role="alert">
+                <strong>DATE OF BIRTH MISSING — VERIFY FERPA STATUS</strong>
+                <span>Add the student's Date of Birth on the Students sheet.</span>
+              </div>
+              <section class="intervention-profile">
+                <div>
+                  <span>Parent/Guardian</span>
+                  <strong id="interventionParentName">—</strong>
+                </div>
+                <div>
+                  <span>Phone</span>
+                  <strong id="interventionParentPhone">—</strong>
+                </div>
+                <div class="intervention-profile__address">
+                  <span>Mailing Address</span>
+                  <strong id="interventionAddress">—</strong>
+                </div>
+                <div>
+                  <span>Semester Absences</span>
+                  <strong id="interventionAbsenceCount">0</strong>
+                </div>
+              </section>
+
+              <div class="intervention-case-layout">
+                <section class="intervention-timeline-panel">
+                  <div class="section-heading-small">
+                    <h3>Case Timeline</h3>
+                    <p>Automatic actions and staff notes are permanent records.</p>
+                  </div>
+                  <button
+                    id="printAttendanceInterventionCaseButton"
+                    class="button button--secondary intervention-print-button"
+                    type="button">
+                    Print Case Timeline
+                  </button>
+                  <div id="interventionTimeline" class="intervention-timeline"></div>
+                  <div id="interventionTimelineEmpty" class="empty-state is-hidden">
+                    <strong>No timeline entries yet</strong>
+                  </div>
+                </section>
+
+                <section class="intervention-note-panel">
+                  <div class="section-heading-small">
+                    <h3>Add Follow-Up Record</h3>
+                    <p>Entries cannot be edited or deleted after saving.</p>
+                  </div>
+
+                  <div class="intervention-note-form">
+                    <div class="field-group">
+                      <label for="interventionNoteType">Follow-Up Type</label>
+                      <select id="interventionNoteType">
+                        <option value="">Select type</option>
+                        <option value="Letter Delivered">Letter Delivered</option>
+                        <option value="Parent Contact">Parent Contact</option>
+                        <option value="Home Visit">Home Visit</option>
+                        <option value="Youth Services Referral">Youth Services Referral</option>
+                        <option value="Tribal Youth Services Referral">Tribal Youth Services Referral</option>
+                        <option value="Credit/Truancy Review">Credit/Truancy Review</option>
+                        <option value="Staff Follow-Up">Staff Follow-Up</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    <div class="field-group">
+                      <label for="interventionEventDate">Date</label>
+                      <input id="interventionEventDate" type="date">
+                    </div>
+
+                    <div class="field-group">
+                      <label for="interventionContactMethod">Contact Method</label>
+                      <select id="interventionContactMethod">
+                        <option value="">Not applicable</option>
+                        <option value="Phone Call">Phone Call</option>
+                        <option value="Text Message">Text Message</option>
+                        <option value="Email">Email</option>
+                        <option value="In Person">In Person</option>
+                        <option value="Home Visit">Home Visit</option>
+                        <option value="Letter">Letter</option>
+                      </select>
+                    </div>
+
+                    <div class="field-group">
+                      <label for="interventionContactWith">Contact With</label>
+                      <input id="interventionContactWith" type="text" placeholder="Name or relationship">
+                    </div>
+
+                    <div class="field-group intervention-note-form__wide">
+                      <label for="interventionNotes">Notes</label>
+                      <textarea
+                        id="interventionNotes"
+                        rows="5"
+                        maxlength="5000"
+                        placeholder="Document what occurred, what was discussed, and any important details."></textarea>
+                    </div>
+
+                    <div class="field-group intervention-note-form__wide">
+                      <label for="interventionOutcome">Outcome</label>
+                      <input id="interventionOutcome" type="text" placeholder="Result of the contact or action">
+                    </div>
+
+                    <div class="field-group">
+                      <label for="interventionNextStep">Next Step</label>
+                      <input id="interventionNextStep" type="text" placeholder="Required follow-up">
+                    </div>
+
+                    <div class="field-group">
+                      <label for="interventionFollowUpDate">Follow-Up Date</label>
+                      <input id="interventionFollowUpDate" type="date">
+                    </div>
+                  </div>
+
+                  <button
+                    id="saveAttendanceInterventionNoteButton"
+                    class="button button--primary button--large"
+                    type="button">
+                    Save Permanent Timeline Entry
+                  </button>
+
+                  <div
+                    id="attendanceInterventionNoteMessage"
+                    class="form-message is-hidden"
+                    role="alert">
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Student attendance history modal -->
+      <div
+        id="studentHistoryModal"
+        class="modal is-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="studentHistoryTitle">
+
+        <div
+          id="studentHistoryModalBackdrop"
+          class="modal__backdrop">
+        </div>
+
+        <div class="modal__panel">
+          <div class="modal__header">
+            <div>
+              <span class="eyebrow">
+                STUDENT ATTENDANCE
+              </span>
+
+              <h2 id="studentHistoryTitle">
+                Attendance History
+              </h2>
+
+              <p id="studentHistoryDetails">
+              </p>
+            </div>
+
+            <button
+              id="closeStudentHistoryButton"
+              class="modal__close"
+              type="button"
+              aria-label="Close attendance history">
+              &times;
+            </button>
+          </div>
+
+          <div class="modal__body">
+            <div class="history-total">
+              <span>Total Recorded Absences</span>
+
+              <strong id="studentHistoryAbsenceTotal">
+                0
+              </strong>
+            </div>
+
+            <div
+              id="studentHistoryLoading"
+              class="inline-loading is-hidden">
+              Loading attendance history…
+            </div>
+
+            <div
+              id="studentHistoryEmpty"
+              class="empty-state is-hidden">
+              <strong>No absences recorded</strong>
+            </div>
+
+            <div
+              id="studentHistoryTableContainer"
+              class="attendance-table-container">
+
+              <table class="attendance-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Absence Date</th>
+                    <th scope="col">Week Beginning</th>
+                    <th scope="col">Campus</th>
+                  </tr>
+                </thead>
+
+                <tbody id="studentHistoryTableBody">
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Add student modal -->
+      <div
+        id="attendanceAddStudentModal"
+        class="modal is-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="attendanceAddStudentTitle">
+
+        <div id="attendanceAddStudentBackdrop" class="modal__backdrop"></div>
+
+        <div class="modal__panel attendance-student-panel">
+          <div class="modal__header">
+            <div>
+              <span class="eyebrow">STUDENT RECORDS</span>
+              <h2 id="attendanceAddStudentTitle">Add New Student</h2>
+              <p>Add the student to Attendance Management.</p>
+            </div>
+            <button id="closeAttendanceAddStudentButton" class="modal__close"
+              type="button" aria-label="Close add student form">&times;</button>
+          </div>
+
+          <form id="attendanceAddStudentForm" class="attendance-student-form">
+            <div class="attendance-student-grid">
+              <div class="field-group">
+                <label for="newStudentId">Student ID *</label>
+                <input id="newStudentId" type="text" maxlength="50"
+                  autocomplete="off" required>
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentCampus">Campus *</label>
+                <select id="newStudentCampus" required></select>
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentFirstName">First Name *</label>
+                <input id="newStudentFirstName" type="text" maxlength="80"
+                  autocomplete="given-name" required>
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentLastName">Last Name *</label>
+                <input id="newStudentLastName" type="text" maxlength="80"
+                  autocomplete="family-name" required>
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentGrade">Grade *</label>
+                <select id="newStudentGrade" required>
+                  <option value="">Select grade</option>
+                  <option value="PK">PK</option>
+                  <option value="K">K</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                  <option value="9">9</option>
+                  <option value="10">10</option>
+                  <option value="11">11</option>
+                  <option value="12">12</option>
+                </select>
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentDateOfBirth">Date of Birth *</label>
+                <input id="newStudentDateOfBirth" type="date" required>
+              </div>
+
+              <div class="field-group attendance-student-grid__wide">
+                <label for="newStudentEmail">Student Email</label>
+                <input id="newStudentEmail" type="email" maxlength="160"
+                  autocomplete="email" placeholder="student@hugoschools.com">
+                <small>Student emails are not sent to HES students.</small>
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentGuardianName">Parent/Guardian Name</label>
+                <input id="newStudentGuardianName" type="text" maxlength="160"
+                  autocomplete="name">
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentGuardianPhone">Parent/Guardian Phone</label>
+                <input id="newStudentGuardianPhone" type="tel" maxlength="40"
+                  autocomplete="tel">
+              </div>
+
+              <div class="field-group attendance-student-grid__wide">
+                <label for="newStudentStreetAddress">Street Address</label>
+                <input id="newStudentStreetAddress" type="text" maxlength="180"
+                  autocomplete="street-address">
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentCity">City</label>
+                <input id="newStudentCity" type="text" maxlength="100"
+                  autocomplete="address-level2">
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentState">State</label>
+                <input id="newStudentState" type="text" maxlength="30" value="OK"
+                  autocomplete="address-level1">
+              </div>
+
+              <div class="field-group">
+                <label for="newStudentZipCode">ZIP Code</label>
+                <input id="newStudentZipCode" type="text" maxlength="20"
+                  autocomplete="postal-code">
+              </div>
+            </div>
+
+            <p class="attendance-student-note">
+              Fields marked with * are required. The new student will be active immediately.
+            </p>
+
+            <div id="attendanceAddStudentMessage" class="form-message is-hidden"
+              role="alert"></div>
+
+            <div class="attendance-student-actions">
+              <button id="cancelAttendanceAddStudentButton"
+                class="button button--secondary" type="button">Cancel</button>
+              <button id="saveAttendanceStudentButton"
+                class="button button--primary" type="submit">Add Student</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+
+      <!-- Manage students modal -->
+      <div
+        id="attendanceManageStudentsModal"
+        class="modal is-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="attendanceManageStudentsTitle">
+
+        <div id="attendanceManageStudentsBackdrop" class="modal__backdrop"></div>
+
+        <div class="modal__panel attendance-manage-panel">
+          <div class="modal__header">
+            <div>
+              <span class="eyebrow">STUDENT RECORDS</span>
+              <h2 id="attendanceManageStudentsTitle">Manage Students</h2>
+              <p>Search for a student and update the student record.</p>
+            </div>
+            <button id="closeAttendanceManageStudentsButton" class="modal__close"
+              type="button" aria-label="Close student management">&times;</button>
+          </div>
+
+          <div class="attendance-manage-body">
+            <section id="attendanceManageSearchView">
+              <form id="attendanceManageSearchForm" class="attendance-manage-search">
+                <div class="field-group">
+                  <label for="manageStudentCampus">Campus</label>
+                  <select id="manageStudentCampus" required></select>
+                </div>
+
+                <div class="field-group attendance-manage-search__query">
+                  <label for="manageStudentSearch">Student Name or ID</label>
+                  <input id="manageStudentSearch" type="search" maxlength="120"
+                    autocomplete="off" placeholder="Enter at least 2 characters" required>
+                </div>
+
+                <button id="manageStudentSearchButton"
+                  class="button button--primary" type="submit">Search</button>
+              </form>
+
+              <div id="attendanceManageSearchMessage" class="form-message is-hidden"
+                role="alert"></div>
+
+              <div id="attendanceManageStudentResults"
+                class="attendance-manage-results"></div>
+
+              <div id="attendanceManageStudentEmpty"
+                class="empty-state is-hidden">
+                <strong>No matching students found</strong>
+                <span>Check the campus, student name, or Student ID.</span>
+              </div>
+            </section>
+
+            <section id="attendanceManageEditView" class="is-hidden">
+              <div class="attendance-manage-record-heading">
+                <div>
+                  <span class="eyebrow">EDIT STUDENT</span>
+                  <h3 id="manageStudentRecordName">Student Record</h3>
+                  <p id="manageStudentRecordDetails"></p>
+                </div>
+                <button id="backToManageStudentResultsButton"
+                  class="button button--secondary" type="button">Back to Results</button>
+              </div>
+
+              <form id="attendanceManageStudentForm" class="attendance-student-form">
+                <div class="attendance-student-grid">
+                  <div class="field-group">
+                    <label for="editStudentId">Student ID</label>
+                    <input id="editStudentId" type="text" readonly>
+                    <small>Student ID cannot be changed because it connects attendance history.</small>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentCampus">Campus *</label>
+                    <select id="editStudentCampus" required></select>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentFirstName">First Name *</label>
+                    <input id="editStudentFirstName" type="text" maxlength="80" required>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentLastName">Last Name *</label>
+                    <input id="editStudentLastName" type="text" maxlength="80" required>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentGrade">Grade *</label>
+                    <select id="editStudentGrade" required>
+                      <option value="">Select grade</option>
+                      <option value="PK">PK</option>
+                      <option value="K">K</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                      <option value="6">6</option>
+                      <option value="7">7</option>
+                      <option value="8">8</option>
+                      <option value="9">9</option>
+                      <option value="10">10</option>
+                      <option value="11">11</option>
+                      <option value="12">12</option>
+                    </select>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentDateOfBirth">Date of Birth *</label>
+                    <input id="editStudentDateOfBirth" type="date" required>
+                  </div>
+
+                  <div class="field-group attendance-student-grid__wide">
+                    <label for="editStudentEmail">Student Email</label>
+                    <input id="editStudentEmail" type="email" maxlength="160"
+                      placeholder="student@hugoschools.com">
+                    <small>Student emails are not sent to HES students.</small>
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentGuardianName">Parent/Guardian Name</label>
+                    <input id="editStudentGuardianName" type="text" maxlength="160">
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentGuardianPhone">Parent/Guardian Phone</label>
+                    <input id="editStudentGuardianPhone" type="tel" maxlength="40">
+                  </div>
+
+                  <div class="field-group attendance-student-grid__wide">
+                    <label for="editStudentStreetAddress">Street Address</label>
+                    <input id="editStudentStreetAddress" type="text" maxlength="180">
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentCity">City</label>
+                    <input id="editStudentCity" type="text" maxlength="100">
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentState">State</label>
+                    <input id="editStudentState" type="text" maxlength="30">
+                  </div>
+
+                  <div class="field-group">
+                    <label for="editStudentZipCode">ZIP Code</label>
+                    <input id="editStudentZipCode" type="text" maxlength="20">
+                  </div>
+
+                  <div id="editStudentActiveField"
+                    class="field-group attendance-student-grid__wide">
+                    <label class="attendance-status-control" for="editStudentActive">
+                      <input id="editStudentActive" type="checkbox">
+                      <span>Student is active</span>
+                    </label>
+                    <small>Inactive students remain in attendance history but are removed from normal attendance searches.</small>
+                  </div>
+                </div>
+
+                <div id="attendanceManageEditMessage" class="form-message is-hidden"
+                  role="alert"></div>
+
+                <div class="attendance-student-actions">
+                  <button id="cancelManageStudentEditButton"
+                    class="button button--secondary" type="button">Back to Results</button>
+                  <button id="saveManagedStudentButton"
+                    class="button button--primary" type="submit">Update Student</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- Change password modal -->
+      <div
+        id="attendancePasswordModal"
+        class="modal is-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="attendancePasswordTitle">
+
+        <div id="attendancePasswordBackdrop" class="modal__backdrop"></div>
+
+        <div class="modal__panel attendance-password-panel">
+          <div class="modal__header">
+            <div>
+              <span class="eyebrow">ACCOUNT SECURITY</span>
+              <h2 id="attendancePasswordTitle">Change Your Password</h2>
+              <p>You will sign in again after changing your password.</p>
+            </div>
+            <button id="closeAttendancePasswordButton" class="modal__close"
+              type="button" aria-label="Close change password form">&times;</button>
+          </div>
+
+          <form id="attendancePasswordForm" class="attendance-password-form">
+            <div class="field-group">
+              <label for="attendanceCurrentPassword">Current Password</label>
+              <input id="attendanceCurrentPassword" type="password" maxlength="256"
+                autocomplete="current-password" required>
+            </div>
+
+            <div class="field-group">
+              <label for="attendanceNewPassword">New Password</label>
+              <input id="attendanceNewPassword" type="password" minlength="8"
+                maxlength="128" autocomplete="new-password" required>
+            </div>
+
+            <div class="field-group">
+              <label for="attendanceConfirmPassword">Confirm New Password</label>
+              <input id="attendanceConfirmPassword" type="password" minlength="8"
+                maxlength="128" autocomplete="new-password" required>
+            </div>
+
+            <p class="attendance-password-requirements">
+              Use at least 8 characters with at least one letter and one number.
+            </p>
+
+            <div id="attendancePasswordMessage" class="form-message is-hidden"
+              role="alert"></div>
+
+            <div class="attendance-password-actions">
+              <button id="cancelAttendancePasswordButton"
+                class="button button--secondary" type="button">Cancel</button>
+              <button id="saveAttendancePasswordButton"
+                class="button button--primary" type="submit">Change Password</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+
+      <!-- General toast message -->
+      <div
+        id="attendanceToast"
+        class="toast is-hidden"
+        role="status"
+        aria-live="polite">
+      </div>
+    </div>
+
+    <?!= includeOutreachFile_('AttendanceScripts'); ?>
+  </body>
+</html>

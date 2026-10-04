@@ -1,0 +1,845 @@
+<script>
+  (function() {
+    'use strict';
+
+    const SESSION_STORAGE_KEY = 'hugoOutreachBackendSession';
+    const ATTENDANCE_WEB_APP_URL = 'https://script.google.com/a/macros/hugoschools.com/s/AKfycbyo_c3wRGFouzIRWljtzdA3tPxrouU7I-JJNNtydFp1u6l_FmhX2-7LVAJ0-SgFamCk/exec';
+
+    const dashboardState = {
+      sessionToken: '',
+      bootstrap: null,
+      cases: [],
+      currentReferralId: '',
+      lastTrigger: null,
+      loading: false,
+      saving: false,
+      changingPassword: false,
+      searchTimer: null
+    };
+
+    const roleLabels = {
+      OUTREACH_COORDINATOR: 'Outreach Coordinator',
+      CAMPUS_ADMIN: 'Campus Administrator',
+      DISTRICT_ADMIN: 'District Administrator',
+      REPORTS_ONLY: 'Reports Only'
+    };
+
+    document.addEventListener('DOMContentLoaded', initializeDashboard);
+
+    function initializeDashboard() {
+      bindDashboardEvents();
+      dashboardState.sessionToken = readDashboardSessionToken();
+
+      if (!dashboardState.sessionToken) {
+        const initialSessionToken = String(document.body.getAttribute('data-session-token') || '').trim().toLowerCase();
+        if (/^[a-f0-9]{64}$/.test(initialSessionToken)) {
+          dashboardState.sessionToken = initialSessionToken;
+          storeDashboardSessionToken(initialSessionToken);
+          document.body.removeAttribute('data-session-token');
+        }
+      }
+
+      if (!dashboardState.sessionToken) {
+        handleDashboardAccessError(new Error('A backend login is required before opening the dashboard.'));
+        return;
+      }
+
+      loadDashboardBootstrap();
+    }
+
+    function loadDashboardBootstrap() {
+      google.script.run
+        .withSuccessHandler(handleDashboardBootstrap)
+        .withFailureHandler(handleDashboardAccessError)
+        .getDashboardBootstrap(dashboardState.sessionToken);
+    }
+
+    function bindDashboardEvents() {
+      document.getElementById('refreshDashboardButton').addEventListener('click', loadDashboardData);
+      document.getElementById('resetFiltersButton').addEventListener('click', resetDashboardFilters);
+      document.getElementById('closeCaseModalButton').addEventListener('click', closeCaseModal);
+      document.getElementById('caseUpdateForm').addEventListener('submit', saveCaseUpdate);
+      document.getElementById('logoutButton').addEventListener('click', logoutDashboardUser);
+      document.getElementById('changePasswordButton').addEventListener('click', openPasswordModal);
+      document.getElementById('closePasswordModalButton').addEventListener('click', closePasswordModal);
+      document.getElementById('cancelPasswordChangeButton').addEventListener('click', closePasswordModal);
+      document.getElementById('changePasswordForm').addEventListener('submit', submitPasswordChange);
+      document.getElementById('passwordModal').addEventListener('click', function(event) {
+        if (event.target.id === 'passwordModal') closePasswordModal();
+      });
+
+      document.getElementById('filterSearch').addEventListener('input', function() {
+        window.clearTimeout(dashboardState.searchTimer);
+        dashboardState.searchTimer = window.setTimeout(loadDashboardData, 350);
+      });
+
+      ['filterCampus', 'filterCategory', 'filterUrgency', 'filterStatus', 'filterAssignee']
+        .forEach(function(id) {
+          document.getElementById(id).addEventListener('change', loadDashboardData);
+        });
+
+      document.getElementById('caseModal').addEventListener('click', function(event) {
+        if (event.target.id === 'caseModal') closeCaseModal();
+      });
+
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && !document.getElementById('passwordModal').classList.contains('is-hidden')) {
+          closePasswordModal();
+          return;
+        }
+        if (event.key === 'Escape' && !document.getElementById('caseModal').classList.contains('is-hidden')) {
+          closeCaseModal();
+        }
+      });
+    }
+
+    function handleDashboardBootstrap(response) {
+      if (!response || response.success !== true) {
+        handleDashboardAccessError(new Error('The dashboard configuration could not be loaded.'));
+        return;
+      }
+
+      dashboardState.bootstrap = response;
+      renderDashboardUser(response.user);
+      populateDashboardFilters(response);
+      configureDashboardPermissions(response.permissions);
+
+      document.getElementById('dashboardLoading').classList.add('is-hidden');
+      document.getElementById('dashboardApp').classList.remove('is-hidden');
+      loadDashboardData();
+    }
+
+    function handleDashboardAccessError(error) {
+      clearDashboardSessionToken();
+      dashboardState.sessionToken = '';
+      document.getElementById('dashboardLoading').classList.add('is-hidden');
+      document.getElementById('dashboardApp').classList.add('is-hidden');
+      document.getElementById('dashboardAccessError').classList.remove('is-hidden');
+      document.getElementById('dashboardAccessMessage').textContent = dashboardErrorMessage(error);
+    }
+
+    function renderDashboardUser(user) {
+      const fullName = user.fullName || user.email || 'Dashboard User';
+      document.getElementById('dashboardUserName').textContent = fullName;
+      document.getElementById('dashboardUserRole').textContent = roleLabels[user.role] || user.role;
+      document.getElementById('userInitials').textContent = initialsForName(fullName);
+
+      if (['DISTRICT_ADMIN', 'OUTREACH_COORDINATOR'].indexOf(user.role) !== -1) {
+        configureAttendanceLink();
+      }
+
+      if (user.role === 'CAMPUS_ADMIN') {
+        document.getElementById('dashboardWelcomeText').textContent =
+          'Viewing student outreach referrals for ' + user.campus + '.';
+      }
+    }
+
+    function configureAttendanceLink() {
+      const attendanceLink = document.getElementById('dashboardAttendanceLink');
+
+      if (!dashboardState.sessionToken) {
+        attendanceLink.classList.add('is-hidden');
+        return;
+      }
+
+      attendanceLink.href =
+        ATTENDANCE_WEB_APP_URL +
+        '?page=attendance&session=' +
+        encodeURIComponent(dashboardState.sessionToken);
+      attendanceLink.classList.remove('is-hidden');
+    }
+
+    function populateDashboardFilters(bootstrap) {
+      populateSelect('filterCampus', bootstrap.campuses, 'All campuses');
+      populateSelect('filterCategory', bootstrap.needCategories, 'All needs');
+      populateSelect('filterUrgency', bootstrap.urgencyLevels, 'All urgency levels');
+      populateSelect('filterStatus', bootstrap.statuses, 'All statuses');
+
+      const assigneeFilter = document.getElementById('filterAssignee');
+      assigneeFilter.replaceChildren();
+      appendOption(assigneeFilter, '', 'All assignees');
+      appendOption(assigneeFilter, '__UNASSIGNED__', 'Unassigned');
+      bootstrap.assignees.forEach(function(assignee) {
+        appendOption(assigneeFilter, assignee.email, assignee.name);
+      });
+
+      const caseAssignee = document.getElementById('caseAssignedTo');
+      caseAssignee.replaceChildren();
+      appendOption(caseAssignee, '', 'Unassigned');
+      bootstrap.assignees.forEach(function(assignee) {
+        appendOption(caseAssignee, assignee.email, assignee.name);
+      });
+
+      const caseStatus = document.getElementById('caseStatus');
+      caseStatus.replaceChildren();
+      bootstrap.statuses.forEach(function(status) {
+        appendOption(caseStatus, status, status);
+      });
+
+      if (bootstrap.user.role === 'CAMPUS_ADMIN') {
+        document.getElementById('filterCampus').value = bootstrap.user.campus;
+      }
+    }
+
+    function configureDashboardPermissions(permissions) {
+      if (!permissions.canViewAllCampuses) {
+        document.getElementById('campusFilterGroup').classList.add('is-hidden');
+      }
+
+      if (!permissions.canViewCases) {
+        document.querySelector('.filter-card').classList.add('is-hidden');
+        document.getElementById('caseListSection').classList.add('is-hidden');
+        document.getElementById('reportsOnlyNotice').classList.remove('is-hidden');
+      }
+    }
+
+    function loadDashboardData() {
+      if (!dashboardState.bootstrap || dashboardState.loading) return;
+
+      dashboardState.loading = true;
+      setCaseListLoading(true);
+      hideCaseListError();
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          dashboardState.loading = false;
+          setCaseListLoading(false);
+
+          if (!response || response.success !== true) {
+            showCaseListError('The dashboard data could not be loaded.');
+            return;
+          }
+
+          renderDashboardStats(response.stats || {});
+          dashboardState.cases = response.cases || [];
+
+          if (dashboardState.bootstrap.permissions.canViewCases) {
+            renderDashboardCases(dashboardState.cases, response.filteredCount);
+          }
+        })
+        .withFailureHandler(function(error) {
+          dashboardState.loading = false;
+          setCaseListLoading(false);
+          showCaseListError(dashboardErrorMessage(error));
+        })
+        .getDashboardData(dashboardState.sessionToken, collectDashboardFilters());
+    }
+
+    function collectDashboardFilters() {
+      return {
+        search: valueOf('filterSearch'),
+        campus: valueOf('filterCampus'),
+        category: valueOf('filterCategory'),
+        urgency: valueOf('filterUrgency'),
+        status: valueOf('filterStatus'),
+        assignedTo: valueOf('filterAssignee')
+      };
+    }
+
+    function renderDashboardStats(stats) {
+      document.getElementById('statNew').textContent = numberOrZero(stats.newCases);
+      document.getElementById('statActive').textContent = numberOrZero(stats.activeCases);
+      document.getElementById('statUrgent').textContent = numberOrZero(stats.urgentOpen);
+      document.getElementById('statFollowUps').textContent = numberOrZero(stats.followUpsDue);
+      document.getElementById('statClosed').textContent = numberOrZero(stats.closedCases);
+    }
+
+    function renderDashboardCases(cases, filteredCount) {
+      const tableBody = document.getElementById('caseTableBody');
+      const cardWrap = document.getElementById('caseCards');
+      const empty = document.getElementById('emptyCases');
+
+      tableBody.replaceChildren();
+      cardWrap.replaceChildren();
+      document.getElementById('caseCount').textContent = String(filteredCount == null ? cases.length : filteredCount);
+
+      if (!cases.length) {
+        empty.classList.remove('is-hidden');
+        return;
+      }
+
+      empty.classList.add('is-hidden');
+      cases.forEach(function(caseRecord) {
+        tableBody.appendChild(buildCaseTableRow(caseRecord));
+        cardWrap.appendChild(buildCaseCard(caseRecord));
+      });
+    }
+
+    function buildCaseTableRow(record) {
+      const row = document.createElement('tr');
+
+      const referralCell = document.createElement('td');
+      referralCell.className = 'referral-cell';
+      referralCell.appendChild(textElement('strong', record.referralId || '-'));
+      referralCell.appendChild(textElement('span', record.submittedAt || ''));
+      row.appendChild(referralCell);
+
+      const studentCell = document.createElement('td');
+      studentCell.className = 'student-cell';
+      studentCell.appendChild(textElement('strong', record.studentName || '-'));
+      studentCell.appendChild(textElement('span', 'Grade ' + (record.grade || '-')));
+      row.appendChild(studentCell);
+
+      row.appendChild(textCell(record.campus || '-'));
+      row.appendChild(textCell(record.needCategory || '-'));
+
+      const urgencyCell = document.createElement('td');
+      urgencyCell.appendChild(buildUrgencyBadge(record.urgency));
+      row.appendChild(urgencyCell);
+
+      const statusCell = document.createElement('td');
+      statusCell.appendChild(buildStatusBadge(record.status));
+      row.appendChild(statusCell);
+
+      const followUpCell = document.createElement('td');
+      followUpCell.textContent = record.followUpDate || '-';
+      if (record.followUpOverdue) {
+        followUpCell.appendChild(textElement('span', 'Overdue', 'overdue-label'));
+      }
+      row.appendChild(followUpCell);
+
+      const actionCell = document.createElement('td');
+      const openButton = document.createElement('button');
+      openButton.type = 'button';
+      openButton.className = 'table-open-button';
+      openButton.setAttribute('aria-label', 'Open referral ' + record.referralId);
+      openButton.textContent = '>';
+      openButton.addEventListener('click', function() { openCaseModal(record.referralId, openButton); });
+      actionCell.appendChild(openButton);
+      row.appendChild(actionCell);
+
+      return row;
+    }
+
+    function buildCaseCard(record) {
+      const card = document.createElement('article');
+      card.className = 'case-card';
+
+      const top = document.createElement('div');
+      top.className = 'case-card__top';
+      const identity = document.createElement('div');
+      identity.appendChild(textElement('strong', record.studentName || '-'));
+      identity.appendChild(textElement('span', record.referralId + ' | ' + (record.submittedAt || '')));
+      top.appendChild(identity);
+      top.appendChild(buildUrgencyBadge(record.urgency));
+      card.appendChild(top);
+
+      const meta = document.createElement('div');
+      meta.className = 'case-card__meta';
+      meta.appendChild(buildMetaBlock('Campus', record.campus || '-'));
+      meta.appendChild(buildMetaBlock('Grade', record.grade || '-'));
+      meta.appendChild(buildMetaBlock('Need', record.needCategory || '-'));
+      meta.appendChild(buildMetaBlock('Follow-up', record.followUpDate || '-'));
+      card.appendChild(meta);
+
+      const bottom = document.createElement('div');
+      bottom.className = 'case-card__bottom';
+      const badges = document.createElement('div');
+      badges.className = 'case-card__badges';
+      badges.appendChild(buildStatusBadge(record.status));
+      if (record.followUpOverdue) badges.appendChild(textElement('span', 'Follow-up overdue', 'urgency-badge urgency-urgent'));
+      bottom.appendChild(badges);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'button button--secondary button--small';
+      button.textContent = 'Open Case';
+      button.addEventListener('click', function() { openCaseModal(record.referralId, button); });
+      bottom.appendChild(button);
+      card.appendChild(bottom);
+
+      return card;
+    }
+
+    function openCaseModal(referralId, trigger) {
+      dashboardState.currentReferralId = referralId;
+      dashboardState.lastTrigger = trigger || null;
+      resetCaseModal();
+
+      document.getElementById('caseModal').classList.remove('is-hidden');
+      document.body.classList.add('modal-open');
+      document.getElementById('closeCaseModalButton').focus();
+
+      google.script.run
+        .withSuccessHandler(renderCaseDetails)
+        .withFailureHandler(function(error) {
+          document.getElementById('caseModalLoading').classList.add('is-hidden');
+          const errorBox = document.getElementById('caseModalError');
+          errorBox.textContent = dashboardErrorMessage(error);
+          errorBox.classList.remove('is-hidden');
+        })
+        .getReferralDetails(dashboardState.sessionToken, referralId);
+    }
+
+    function resetCaseModal() {
+      document.getElementById('caseModalLoading').classList.remove('is-hidden');
+      document.getElementById('caseModalContent').classList.add('is-hidden');
+      document.getElementById('caseModalError').classList.add('is-hidden');
+      document.getElementById('caseModalError').textContent = '';
+      document.getElementById('caseUpdateError').classList.add('is-hidden');
+      document.getElementById('caseUpdateError').textContent = '';
+      document.getElementById('modalReferralId').textContent = 'Referral ' + dashboardState.currentReferralId;
+      document.getElementById('caseModalTitle').textContent = 'Student referral';
+      document.getElementById('modalBadges').replaceChildren();
+      document.getElementById('studentDetailGrid').replaceChildren();
+      document.getElementById('caseHistory').replaceChildren();
+    }
+
+    function renderCaseDetails(response) {
+      if (!response || response.success !== true || !response.referral) {
+        throw new Error('The referral details could not be loaded.');
+      }
+
+      const referral = response.referral;
+      dashboardState.currentReferralId = referral.referralId;
+
+      document.getElementById('caseModalLoading').classList.add('is-hidden');
+      document.getElementById('caseModalContent').classList.remove('is-hidden');
+      document.getElementById('modalReferralId').textContent = 'Referral ' + referral.referralId;
+      document.getElementById('caseModalTitle').textContent = referral.studentName || 'Student referral';
+
+      const badges = document.getElementById('modalBadges');
+      badges.replaceChildren();
+      badges.appendChild(buildUrgencyBadge(referral.urgency));
+      badges.appendChild(buildStatusBadge(referral.status));
+      badges.appendChild(textElement('span', referral.campus || '-', 'badge status-unable-to-contact'));
+
+      renderDetailGrid(referral);
+      document.getElementById('detailSituation').textContent = referral.situationDescription || 'Not provided';
+      document.getElementById('detailAssistance').textContent = referral.assistanceAlreadyProvided || 'None reported';
+
+      configureCaseManagement(referral, response.permissions);
+      renderCaseHistory(response.updates || []);
+    }
+
+    function renderDetailGrid(referral) {
+      const grid = document.getElementById('studentDetailGrid');
+      grid.replaceChildren();
+
+      [
+        ['Student', referral.studentName || '-'],
+        ['Student ID', referral.studentId || 'Not provided'],
+        ['Grade', referral.grade || '-'],
+        ['Campus', referral.campus || '-'],
+        ['Type of need', referral.needCategory || '-'],
+        ['Parent/Guardian', referral.parentGuardianName || 'Not provided'],
+        ['Parent/Guardian phone', referral.parentGuardianPhone || 'Not provided'],
+        ['Submitted', referral.submittedAt || '-'],
+        ['Submitted by', (referral.submittedByName || '-') + (referral.submittedByEmail ? ' | ' + referral.submittedByEmail : '')],
+        ['Assigned to', assigneeDisplayName(referral.assignedTo) || 'Unassigned'],
+        ['Last updated', referral.lastUpdatedAt || '-'],
+        ['Last updated by', referral.lastUpdatedBy || '-']
+      ].forEach(function(item) {
+        const wrap = document.createElement('div');
+        wrap.appendChild(textElement('dt', item[0]));
+        wrap.appendChild(textElement('dd', item[1]));
+        grid.appendChild(wrap);
+      });
+    }
+
+    function configureCaseManagement(referral, permissions) {
+      const managementSection = document.getElementById('caseManagementSection');
+      const historyNumber = document.getElementById('historySectionNumber');
+
+      if (!permissions.canEditCases) {
+        managementSection.classList.add('is-hidden');
+        historyNumber.textContent = '3';
+        return;
+      }
+
+      managementSection.classList.remove('is-hidden');
+      historyNumber.textContent = '4';
+      document.getElementById('caseReferralId').value = referral.referralId;
+      document.getElementById('caseAssignedTo').value = referral.assignedTo || '';
+      document.getElementById('caseStatus').value = referral.status || 'New';
+      document.getElementById('caseFollowUpDate').value = referral.followUpDate || '';
+      document.getElementById('caseResolutionSummary').value = referral.resolutionSummary || '';
+      document.getElementById('caseNote').value = '';
+    }
+
+    function renderCaseHistory(updates) {
+      const history = document.getElementById('caseHistory');
+      const empty = document.getElementById('emptyHistory');
+      history.replaceChildren();
+
+      if (!updates.length) {
+        empty.classList.remove('is-hidden');
+        return;
+      }
+
+      empty.classList.add('is-hidden');
+      updates.forEach(function(update) {
+        const item = document.createElement('article');
+        item.className = 'timeline-item';
+
+        const heading = document.createElement('div');
+        heading.className = 'timeline-heading';
+        heading.appendChild(textElement('strong', updateTypeLabel(update.updateType)));
+        heading.appendChild(textElement('span', update.createdAt || ''));
+        item.appendChild(heading);
+
+        if (update.caseNote) item.appendChild(textElement('p', update.caseNote));
+
+        const meta = document.createElement('div');
+        meta.className = 'timeline-meta';
+        if (update.previousStatus !== update.newStatus) {
+          meta.appendChild(textElement('span', (update.previousStatus || '-') + ' -> ' + (update.newStatus || '-')));
+        }
+        if (update.followUpDate) meta.appendChild(textElement('span', 'Follow-up: ' + update.followUpDate));
+        if (update.createdBy) meta.appendChild(textElement('span', update.createdBy));
+        item.appendChild(meta);
+        history.appendChild(item);
+      });
+    }
+
+    function saveCaseUpdate(event) {
+      event.preventDefault();
+      if (dashboardState.saving) return;
+
+      hideCaseUpdateError();
+
+      const payload = {
+        referralId: valueOf('caseReferralId'),
+        assignedTo: valueOf('caseAssignedTo'),
+        status: valueOf('caseStatus'),
+        followUpDate: valueOf('caseFollowUpDate'),
+        caseNote: valueOf('caseNote'),
+        resolutionSummary: valueOf('caseResolutionSummary')
+      };
+
+      if (!payload.caseNote && !payload.resolutionSummary) {
+        showCaseUpdateError('Add a case note or resolution summary describing this update.');
+        document.getElementById('caseNote').focus();
+        return;
+      }
+
+      if (payload.status === 'Closed' && !payload.resolutionSummary) {
+        showCaseUpdateError('Enter a resolution summary before closing the case.');
+        document.getElementById('caseResolutionSummary').focus();
+        return;
+      }
+
+      setCaseSaving(true);
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          setCaseSaving(false);
+          if (!response || response.success !== true) {
+            showCaseUpdateError('The case update could not be saved.');
+            return;
+          }
+
+          loadDashboardData();
+          reloadOpenCase();
+        })
+        .withFailureHandler(function(error) {
+          setCaseSaving(false);
+          showCaseUpdateError(dashboardErrorMessage(error));
+        })
+        .updateReferralCase(dashboardState.sessionToken, payload);
+    }
+
+    function reloadOpenCase() {
+      document.getElementById('caseModalContent').classList.add('is-hidden');
+      document.getElementById('caseModalLoading').classList.remove('is-hidden');
+
+      google.script.run
+        .withSuccessHandler(renderCaseDetails)
+        .withFailureHandler(function(error) {
+          document.getElementById('caseModalLoading').classList.add('is-hidden');
+          const errorBox = document.getElementById('caseModalError');
+          errorBox.textContent = dashboardErrorMessage(error);
+          errorBox.classList.remove('is-hidden');
+        })
+        .getReferralDetails(dashboardState.sessionToken, dashboardState.currentReferralId);
+    }
+
+    function closeCaseModal() {
+      document.getElementById('caseModal').classList.add('is-hidden');
+      document.body.classList.remove('modal-open');
+      dashboardState.currentReferralId = '';
+
+      if (dashboardState.lastTrigger && document.body.contains(dashboardState.lastTrigger)) {
+        dashboardState.lastTrigger.focus();
+      }
+      dashboardState.lastTrigger = null;
+    }
+
+    function resetDashboardFilters() {
+      document.getElementById('filterSearch').value = '';
+      document.getElementById('filterCategory').value = '';
+      document.getElementById('filterUrgency').value = '';
+      document.getElementById('filterStatus').value = '';
+      document.getElementById('filterAssignee').value = '';
+
+      if (dashboardState.bootstrap.permissions.canViewAllCampuses) {
+        document.getElementById('filterCampus').value = '';
+      } else {
+        document.getElementById('filterCampus').value = dashboardState.bootstrap.user.campus;
+      }
+
+      loadDashboardData();
+    }
+
+    function setCaseListLoading(loading) {
+      document.getElementById('caseListLoading').classList.toggle('is-hidden', !loading);
+      document.getElementById('refreshDashboardButton').disabled = loading;
+    }
+
+    function setCaseSaving(saving) {
+      dashboardState.saving = saving;
+      const button = document.getElementById('saveCaseButton');
+      button.disabled = saving;
+      button.querySelector('.save-label').classList.toggle('is-hidden', saving);
+      button.querySelector('.save-loading').classList.toggle('is-hidden', !saving);
+    }
+
+    function showCaseListError(message) {
+      const box = document.getElementById('caseListError');
+      box.textContent = message;
+      box.classList.remove('is-hidden');
+    }
+
+    function hideCaseListError() {
+      const box = document.getElementById('caseListError');
+      box.textContent = '';
+      box.classList.add('is-hidden');
+    }
+
+    function showCaseUpdateError(message) {
+      const box = document.getElementById('caseUpdateError');
+      box.textContent = message;
+      box.classList.remove('is-hidden');
+    }
+
+    function hideCaseUpdateError() {
+      const box = document.getElementById('caseUpdateError');
+      box.textContent = '';
+      box.classList.add('is-hidden');
+    }
+
+    function populateSelect(selectId, values, placeholder) {
+      const select = document.getElementById(selectId);
+      select.replaceChildren();
+      appendOption(select, '', placeholder);
+      values.forEach(function(value) { appendOption(select, String(value), String(value)); });
+    }
+
+    function appendOption(select, value, label) {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = label;
+      select.appendChild(option);
+    }
+
+    function buildStatusBadge(status) {
+      return textElement('span', status || 'Unknown', 'status-badge status-' + slugify(status || 'unknown'));
+    }
+
+    function buildUrgencyBadge(urgency) {
+      return textElement('span', urgency || 'Unknown', 'urgency-badge urgency-' + slugify(urgency || 'unknown'));
+    }
+
+    function buildMetaBlock(label, value) {
+      const wrap = document.createElement('div');
+      wrap.appendChild(textElement('span', label));
+      wrap.appendChild(textElement('strong', value));
+      return wrap;
+    }
+
+    function textCell(value) {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      return cell;
+    }
+
+    function textElement(tagName, value, className) {
+      const element = document.createElement(tagName);
+      element.textContent = value == null ? '' : String(value);
+      if (className) element.className = className;
+      return element;
+    }
+
+    function assigneeDisplayName(email) {
+      if (!email || !dashboardState.bootstrap) return '';
+      const match = dashboardState.bootstrap.assignees.find(function(assignee) {
+        return assignee.email.toLowerCase() === String(email).toLowerCase();
+      });
+      return match ? match.name : email;
+    }
+
+    function updateTypeLabel(value) {
+      const labels = {
+        CASE_CLOSED: 'Case closed',
+        STATUS_CHANGE: 'Status changed',
+        CASE_NOTE: 'Case note added',
+        CASE_UPDATE: 'Case updated'
+      };
+      return labels[value] || 'Case updated';
+    }
+
+    function logoutDashboardUser() {
+      const button = document.getElementById('logoutButton');
+      button.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          clearDashboardSessionToken();
+          dashboardState.sessionToken = '';
+
+          if (response && response.loginUrl) {
+            window.top.location.href = response.loginUrl;
+          } else {
+            window.top.location.reload();
+          }
+        })
+        .withFailureHandler(function(error) {
+          button.disabled = false;
+          clearDashboardSessionToken();
+          dashboardState.sessionToken = '';
+          handleDashboardAccessError(error);
+        })
+        .logoutBackendSession(dashboardState.sessionToken);
+    }
+
+    function openPasswordModal() {
+      document.getElementById('changePasswordForm').reset();
+      hidePasswordChangeError();
+      document.getElementById('passwordModal').classList.remove('is-hidden');
+      document.body.classList.add('modal-open');
+      window.setTimeout(function() {
+        document.getElementById('currentPassword').focus();
+      }, 0);
+    }
+
+    function closePasswordModal() {
+      if (dashboardState.changingPassword) return;
+      document.getElementById('passwordModal').classList.add('is-hidden');
+      if (document.getElementById('caseModal').classList.contains('is-hidden')) {
+        document.body.classList.remove('modal-open');
+      }
+      document.getElementById('changePasswordForm').reset();
+      hidePasswordChangeError();
+    }
+
+    function submitPasswordChange(event) {
+      event.preventDefault();
+      if (dashboardState.changingPassword) return;
+
+      const currentPassword = document.getElementById('currentPassword').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmPassword = document.getElementById('confirmNewPassword').value;
+
+      hidePasswordChangeError();
+      if (newPassword !== confirmPassword) {
+        showPasswordChangeError('The new passwords do not match.');
+        return;
+      }
+      if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+        showPasswordChangeError(
+          'Use at least 8 characters with at least one letter and one number.'
+        );
+        return;
+      }
+
+      dashboardState.changingPassword = true;
+      const button = document.getElementById('savePasswordButton');
+      button.disabled = true;
+      button.textContent = 'Changing...';
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          dashboardState.changingPassword = false;
+          clearDashboardSessionToken();
+          dashboardState.sessionToken = '';
+          window.alert(
+            response && response.message
+              ? response.message
+              : 'Your password was changed. Please sign in again.'
+          );
+          window.top.location.href = response && response.loginUrl
+            ? response.loginUrl
+            : '?page=login';
+        })
+        .withFailureHandler(function(error) {
+          dashboardState.changingPassword = false;
+          button.disabled = false;
+          button.textContent = 'Change Password';
+          showPasswordChangeError(dashboardErrorMessage(error));
+        })
+        .changeBackendPassword(dashboardState.sessionToken, {
+          currentPassword: currentPassword,
+          newPassword: newPassword,
+          confirmPassword: confirmPassword
+        });
+    }
+
+    function showPasswordChangeError(message) {
+      const element = document.getElementById('passwordChangeError');
+      element.textContent = message;
+      element.classList.remove('is-hidden');
+    }
+
+    function hidePasswordChangeError() {
+      const element = document.getElementById('passwordChangeError');
+      element.textContent = '';
+      element.classList.add('is-hidden');
+    }
+
+    function readDashboardSessionToken() {
+      try {
+        return String(window.localStorage.getItem(SESSION_STORAGE_KEY) || '');
+      } catch (error) {
+        return '';
+      }
+    }
+
+    function storeDashboardSessionToken(token) {
+      try {
+        window.localStorage.setItem(SESSION_STORAGE_KEY, token);
+      } catch (error) {
+        // The active in-memory session still works for this dashboard visit.
+      }
+    }
+
+    function clearDashboardSessionToken() {
+      try {
+        window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      } catch (error) {
+        // The server still rejects an expired or removed token.
+      }
+    }
+
+    function initialsForName(name) {
+      const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return '-';
+      if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+
+    function slugify(value) {
+      return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }
+
+    function valueOf(id) {
+      return String(document.getElementById(id).value || '').trim();
+    }
+
+    function numberOrZero(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? String(number) : '0';
+    }
+
+    function dashboardErrorMessage(error) {
+      if (!error) return 'An unexpected error occurred. Please try again.';
+      const message = typeof error === 'string' ? error : (error.message || error.toString() || '');
+      return String(message)
+        .replace(/^Exception:\s*/i, '')
+        .replace(/^Error:\s*/i, '')
+        .trim() || 'An unexpected error occurred. Please try again.';
+    }
+  })();
+</script>

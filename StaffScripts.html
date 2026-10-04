@@ -1,0 +1,807 @@
+<script>
+  (function() {
+    'use strict';
+
+    const state = {
+      bootstrap: null,
+      submitting: false
+    };
+
+    const requiredFields = [
+      'reporterName',
+      'reporterEmail',
+      'studentFirstName',
+      'studentLastName',
+      'grade',
+      'campus',
+      'needCategory',
+      'urgency',
+      'situationDescription',
+      'acknowledgement'
+    ];
+
+    document.addEventListener(
+      'DOMContentLoaded',
+      initializeStaffForm
+    );
+
+    function initializeStaffForm() {
+      bindEvents();
+      restoreReporterInformation();
+
+      google.script.run
+        .withSuccessHandler(
+          handleBootstrapSuccess
+        )
+        .withFailureHandler(
+          handleBootstrapFailure
+        )
+        .getStaffFormBootstrap();
+    }
+
+    function bindEvents() {
+      const form =
+        document.getElementById(
+          'referralForm'
+        );
+
+      const description =
+        document.getElementById(
+          'situationDescription'
+        );
+
+      const reporterName =
+        document.getElementById(
+          'reporterName'
+        );
+
+      const reporterEmail =
+        document.getElementById(
+          'reporterEmail'
+        );
+
+      const phone =
+        document.getElementById(
+          'parentGuardianPhone'
+        );
+
+      const submitAnotherButton =
+        document.getElementById(
+          'submitAnotherButton'
+        );
+
+      form.addEventListener(
+        'submit',
+        handleSubmit
+      );
+
+      description.addEventListener(
+        'input',
+        updateDescriptionCount
+      );
+
+      reporterName.addEventListener(
+        'input',
+        rememberReporterInformation
+      );
+
+      reporterEmail.addEventListener(
+        'input',
+        rememberReporterInformation
+      );
+
+      phone.addEventListener(
+        'blur',
+        formatPhoneNumber
+      );
+
+      submitAnotherButton.addEventListener(
+        'click',
+        resetForAnotherReferral
+      );
+
+      form
+        .querySelectorAll(
+          'input, select, textarea'
+        )
+        .forEach(function(field) {
+          field.addEventListener(
+            'input',
+            function() {
+              clearFieldError(field.id);
+            }
+          );
+
+          field.addEventListener(
+            'change',
+            function() {
+              clearFieldError(field.id);
+            }
+          );
+        });
+    }
+
+    function handleBootstrapSuccess(response) {
+      if (
+        !response ||
+        response.success !== true
+      ) {
+        handleBootstrapFailure(
+          new Error(
+            'The form configuration could not be loaded.'
+          )
+        );
+
+        return;
+      }
+
+      state.bootstrap = response;
+
+      populateSelect(
+        'grade',
+        response.grades || [],
+        'Select grade'
+      );
+
+      populateSelect(
+        'campus',
+        response.campuses || [],
+        'Select campus'
+      );
+
+      populateSelect(
+        'needCategory',
+        response.needCategories || [],
+        'Select type of need'
+      );
+
+      populateSelect(
+        'urgency',
+        response.urgencyLevels || [],
+        'Select urgency'
+      );
+
+      document
+        .getElementById('loadingScreen')
+        .classList.add('is-hidden');
+
+      document
+        .getElementById('formScreen')
+        .classList.remove('is-hidden');
+
+      document
+        .getElementById('reporterName')
+        .focus();
+    }
+
+    function handleBootstrapFailure(error) {
+      document
+        .getElementById('loadingScreen')
+        .classList.add('is-hidden');
+
+      document
+        .getElementById('formScreen')
+        .classList.add('is-hidden');
+
+      document
+        .getElementById('accessErrorScreen')
+        .classList.remove('is-hidden');
+
+      document
+        .getElementById(
+          'accessErrorMessage'
+        )
+        .textContent =
+          getErrorMessage(error);
+    }
+
+    function populateSelect(
+      selectId,
+      values,
+      placeholder
+    ) {
+      const select =
+        document.getElementById(selectId);
+
+      select.replaceChildren();
+
+      const placeholderOption =
+        document.createElement('option');
+
+      placeholderOption.value = '';
+      placeholderOption.textContent =
+        placeholder;
+
+      select.appendChild(
+        placeholderOption
+      );
+
+      values.forEach(function(value) {
+        const option =
+          document.createElement('option');
+
+        option.value = String(value);
+        option.textContent = String(value);
+
+        select.appendChild(option);
+      });
+    }
+
+    function handleSubmit(event) {
+      event.preventDefault();
+
+      if (state.submitting) {
+        return;
+      }
+
+      clearAllErrors();
+
+      if (!validateForm()) {
+        showSubmitError(
+          'Please correct the highlighted fields before submitting.'
+        );
+
+        focusFirstInvalidField();
+        return;
+      }
+
+      const payload =
+        collectFormData();
+
+      setSubmitting(true);
+
+      google.script.run
+        .withSuccessHandler(
+          handleSubmitSuccess
+        )
+        .withFailureHandler(
+          handleSubmitFailure
+        )
+        .submitStudentReferral(payload);
+    }
+
+    function validateForm() {
+      let valid = true;
+
+      requiredFields.forEach(
+        function(fieldId) {
+          const field =
+            document.getElementById(
+              fieldId
+            );
+
+          const isCheckbox =
+            field.type === 'checkbox';
+
+          const hasValue =
+            isCheckbox
+              ? field.checked
+              : String(
+                  field.value || ''
+                ).trim() !== '';
+
+          if (!hasValue) {
+            setFieldError(
+              fieldId,
+              isCheckbox
+                ? 'Please check this box before submitting.'
+                : 'This field is required.'
+            );
+
+            valid = false;
+          }
+        }
+      );
+
+      const reporterEmail =
+        valueOf('reporterEmail');
+
+      if (
+        reporterEmail &&
+        !isValidEmail(reporterEmail)
+      ) {
+        setFieldError(
+          'reporterEmail',
+          'Enter a valid email address.'
+        );
+
+        valid = false;
+      }
+
+      const description =
+        document.getElementById(
+          'situationDescription'
+        );
+
+      if (
+        description.value.trim() &&
+        description.value.trim().length < 10
+      ) {
+        setFieldError(
+          'situationDescription',
+          'Please provide a little more detail about the situation.'
+        );
+
+        valid = false;
+      }
+
+      return valid;
+    }
+
+    function collectFormData() {
+      return {
+        reporterName:
+          valueOf('reporterName'),
+
+        reporterEmail:
+          valueOf('reporterEmail'),
+
+        studentFirstName:
+          valueOf('studentFirstName'),
+
+        studentLastName:
+          valueOf('studentLastName'),
+
+        studentId:
+          valueOf('studentId'),
+
+        grade:
+          valueOf('grade'),
+
+        campus:
+          valueOf('campus'),
+
+        needCategory:
+          valueOf('needCategory'),
+
+        urgency:
+          valueOf('urgency'),
+
+        situationDescription:
+          valueOf('situationDescription'),
+
+        assistanceAlreadyProvided:
+          valueOf(
+            'assistanceAlreadyProvided'
+          ),
+
+        parentGuardianName:
+          valueOf('parentGuardianName'),
+
+        parentGuardianPhone:
+          valueOf('parentGuardianPhone'),
+
+        acknowledgement:
+          document
+            .getElementById(
+              'acknowledgement'
+            )
+            .checked
+      };
+    }
+
+    function handleSubmitSuccess(response) {
+      setSubmitting(false);
+
+      if (
+        !response ||
+        response.success !== true ||
+        !response.referralId
+      ) {
+        showSubmitError(
+          'The referral may not have been submitted. Please try again.'
+        );
+
+        return;
+      }
+
+      document
+        .getElementById(
+          'successReferralId'
+        )
+        .textContent =
+          response.referralId;
+
+      document
+        .getElementById('formScreen')
+        .classList.add('is-hidden');
+
+      document
+        .getElementById('successScreen')
+        .classList.remove('is-hidden');
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+    }
+
+    function handleSubmitFailure(error) {
+      setSubmitting(false);
+
+      showSubmitError(
+        getErrorMessage(error)
+      );
+
+      const form =
+        document.getElementById(
+          'referralForm'
+        );
+
+      const top =
+        form.getBoundingClientRect().top +
+        window.scrollY -
+        20;
+
+      window.scrollTo({
+        top: top,
+        behavior: 'smooth'
+      });
+    }
+
+    function resetForAnotherReferral() {
+      const form =
+        document.getElementById(
+          'referralForm'
+        );
+
+      const reporterName =
+        document.getElementById(
+          'reporterName'
+        ).value;
+
+      const reporterEmail =
+        document.getElementById(
+          'reporterEmail'
+        ).value;
+
+      form.reset();
+
+      clearAllErrors();
+      hideSubmitError();
+      updateDescriptionCount();
+
+      document
+        .getElementById(
+          'reporterName'
+        )
+        .value =
+          reporterName;
+
+      document
+        .getElementById(
+          'reporterEmail'
+        )
+        .value =
+          reporterEmail;
+
+      document
+        .getElementById('successScreen')
+        .classList.add('is-hidden');
+
+      document
+        .getElementById('formScreen')
+        .classList.remove('is-hidden');
+
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
+
+      window.setTimeout(
+        function() {
+          document
+            .getElementById(
+              'studentFirstName'
+            )
+            .focus();
+        },
+        250
+      );
+    }
+
+    function setSubmitting(isSubmitting) {
+      state.submitting =
+        isSubmitting;
+
+      const button =
+        document.getElementById(
+          'submitButton'
+        );
+
+      const label =
+        button.querySelector(
+          '.button__label'
+        );
+
+      const loading =
+        button.querySelector(
+          '.button__loading'
+        );
+
+      button.disabled =
+        isSubmitting;
+
+      label.classList.toggle(
+        'is-hidden',
+        isSubmitting
+      );
+
+      loading.classList.toggle(
+        'is-hidden',
+        !isSubmitting
+      );
+    }
+
+    function setFieldError(
+      fieldId,
+      message
+    ) {
+      const field =
+        document.getElementById(
+          fieldId
+        );
+
+      const error =
+        document.querySelector(
+          '[data-error-for="' +
+          fieldId +
+          '"]'
+        );
+
+      if (field) {
+        field.classList.add(
+          'is-invalid'
+        );
+
+        field.setAttribute(
+          'aria-invalid',
+          'true'
+        );
+      }
+
+      if (error) {
+        error.textContent = message;
+      }
+    }
+
+    function clearFieldError(fieldId) {
+      const field =
+        document.getElementById(
+          fieldId
+        );
+
+      const error =
+        document.querySelector(
+          '[data-error-for="' +
+          fieldId +
+          '"]'
+        );
+
+      if (field) {
+        field.classList.remove(
+          'is-invalid'
+        );
+
+        field.removeAttribute(
+          'aria-invalid'
+        );
+      }
+
+      if (error) {
+        error.textContent = '';
+      }
+
+      hideSubmitError();
+    }
+
+    function clearAllErrors() {
+      document
+        .querySelectorAll('.is-invalid')
+        .forEach(function(field) {
+          field.classList.remove(
+            'is-invalid'
+          );
+
+          field.removeAttribute(
+            'aria-invalid'
+          );
+        });
+
+      document
+        .querySelectorAll('.field-error')
+        .forEach(function(error) {
+          error.textContent = '';
+        });
+
+      hideSubmitError();
+    }
+
+    function focusFirstInvalidField() {
+      const firstInvalid =
+        document.querySelector(
+          '.is-invalid'
+        );
+
+      if (!firstInvalid) {
+        return;
+      }
+
+      firstInvalid.focus();
+
+      firstInvalid.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center'
+      });
+    }
+
+    function showSubmitError(message) {
+      const errorBox =
+        document.getElementById(
+          'submitError'
+        );
+
+      errorBox.textContent = message;
+
+      errorBox.classList.remove(
+        'is-hidden'
+      );
+    }
+
+    function hideSubmitError() {
+      const errorBox =
+        document.getElementById(
+          'submitError'
+        );
+
+      errorBox.textContent = '';
+
+      errorBox.classList.add(
+        'is-hidden'
+      );
+    }
+
+    function updateDescriptionCount() {
+      const field =
+        document.getElementById(
+          'situationDescription'
+        );
+
+      document
+        .getElementById(
+          'descriptionCount'
+        )
+        .textContent =
+          field.value.length +
+          ' / 3000';
+    }
+
+    function formatPhoneNumber() {
+      const field =
+        document.getElementById(
+          'parentGuardianPhone'
+        );
+
+      const digits =
+        field.value.replace(
+          /\D/g,
+          ''
+        );
+
+      if (digits.length === 10) {
+        field.value =
+          '(' +
+          digits.slice(0, 3) +
+          ') ' +
+          digits.slice(3, 6) +
+          '-' +
+          digits.slice(6);
+      }
+    }
+
+    function rememberReporterInformation() {
+      try {
+        window.localStorage.setItem(
+          'outreachReporterName',
+          document
+            .getElementById(
+              'reporterName'
+            )
+            .value
+        );
+
+        window.localStorage.setItem(
+          'outreachReporterEmail',
+          document
+            .getElementById(
+              'reporterEmail'
+            )
+            .value
+        );
+      } catch (error) {
+        /*
+         * The form continues normally if browser
+         * storage is unavailable.
+         */
+      }
+    }
+
+    function restoreReporterInformation() {
+      try {
+        const savedName =
+          window.localStorage.getItem(
+            'outreachReporterName'
+          );
+
+        const savedEmail =
+          window.localStorage.getItem(
+            'outreachReporterEmail'
+          );
+
+        if (savedName) {
+          document
+            .getElementById(
+              'reporterName'
+            )
+            .value =
+              savedName;
+        }
+
+        if (savedEmail) {
+          document
+            .getElementById(
+              'reporterEmail'
+            )
+            .value =
+              savedEmail;
+        }
+      } catch (error) {
+        /*
+         * The form continues normally if browser
+         * storage is unavailable.
+         */
+      }
+    }
+
+    function isValidEmail(value) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        String(value || '').trim()
+      );
+    }
+
+    function valueOf(fieldId) {
+      return String(
+        document
+          .getElementById(fieldId)
+          .value || ''
+      ).trim();
+    }
+
+    function getErrorMessage(error) {
+      if (!error) {
+        return 'An unexpected error occurred. Please try again.';
+      }
+
+      const message =
+        typeof error === 'string'
+          ? error
+          : (
+              error.message ||
+              error.toString() ||
+              ''
+            );
+
+      return String(message)
+        .replace(
+          /^Exception:\s*/i,
+          ''
+        )
+        .replace(
+          /^Error:\s*/i,
+          ''
+        )
+        .trim() ||
+        'An unexpected error occurred. Please try again.';
+    }
+  })();
+</script>
